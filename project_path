@@ -1,0 +1,83 @@
+Step 0: Data Preprocessing
+•	Objective: Combine 19 project-specific datasets into a unified knowledge base, preprocess text for embeddings, and store filter fields as metadata.
+•	Action: Merge datasets, clean and normalize text, and prepare metadata for post-search filtering.
+•	Details: 
+o	Load 19 Dataiku datasets
+o	Drop rows with missing observation or solution.
+o	Clean text columns (observation, solution)
+o	Fill missing metadata (project, database, language) with mode values per dataset.
+o	Standardize language to ISO codes (e.g., en, fr, it, kk, ru, es, sv).
+o	Keep metadata: project, fleet, subsystem, database, observationcategory, problemcode, problemcause, solutioncategory, language, failureclass, date.
+o	Save to combined_data.csv and Dataiku dataset combined_data.
+•	Outcome: A clean, unified dataset for your smaller version, ready for embedding generation.
+Step 1: Select a Multilingual LLM
+•	Objective: Identify a model for cross-lingual understanding across 7 languages (scalable to 11).
+•	Action: Load paraphrase-multilingual-mpnet-base-v2 via sentence-transformers, validating support for English, French, Italian, Kazakh, Russian, Spanish, Swedish.
+•	Details: 
+o	Test with sample sentences in all 7 languages.
+o	Confirm embeddings (512D) align semantically across languages using cosine similarity.
+•	Outcome: A high-performing LLM for language-agnostic semantic search.
+Step 2: Generate Cross-Lingual Embeddings for the Knowledge Base
+•	Objective: Embed entries for efficient retrieval using a single FAISS index, with separate embeddings for testing.
+•	Action: Generate single-vector embeddings for text and store in FAISS, while saving separate embeddings for observation, problem_cause, and solution in a side dataset.
+•	Details: 
+o	Load combined_data.csv.
+o	Generate single embeddings for text using the LLM.
+o	Build a single IndexFlatL2 FAISS index for dense retrieval.
+o	Prepare BM25 model for sparse retrieval (tokenize text).
+o	Store metadata (project, language, etc.) in a CSV for filtering.
+o	Generate separate embeddings for observation, problem_cause, solution and save to multi_embeddings.pkl.
+o	Save outputs: knowledge_base_index.faiss, bm25_model.pkl, metadata.csv, multi_embeddings.pkl, knowledge_base_with_index.csv.
+•	Outcome: A searchable knowledge base with single-vector embeddings and multivector testing data.
+Step 3: Set Up Query Handling
+•	Objective: Process queries in any of the 7 languages.
+•	Action: Detect query language and generate a multilingual embedding.
+•	Details: 
+o	Use FastText for rapid language detection (e.g., en, fr, it, kk, ru, es, sv).
+o	Normalize and spell-check queries (lowercase, remove special characters).
+o	Generate a single 512D embedding using the LLM.
+•	Outcome: A query embedding ready for cross-lingual search.
+Step 4: Perform Hybrid Similarity Search
+•	Objective: Retrieve relevant entries with high accuracy, then filter results.
+•	Action: Combine dense (FAISS) and sparse (BM25) retrieval, followed by metadata filtering.
+•	Details: 
+o	Search FAISS index with query embedding for top-k results (e.g., top-50) using cosine similarity.
+o	Rerank with BM25 scores to boost keyword matches.
+o	Filter results by metadata (e.g., project, problemcode) post-search.
+•	Outcome: Accurate, filtered search results tailored to user criteria.
+Step 5: Translate and Cache Responses
+•	Objective: Deliver consistent, language-appropriate responses.
+•	Action: Translate retrieved entries using MarianMT (Kazakh), caching results.
+•	Details: 
+o	Use DeepL API for English, French, Italian, Russian, Spanish, Swedish.
+o	Use MarianMT (Hugging Face) for Kazakh with greedy decoding for consistency.
+o	Cache translations in a key-value store (e.g., dictionary or Redis) linked to entry index and target language.
+•	Outcome: Fast, high-quality translations with caching for efficiency.
+Step 6: Deliver the Result
+•	Objective: Provide clear, user-friendly answers.
+•	Action: Fetch cached translations or translate on-the-fly and cache.
+•	Details: 
+o	Check cache for existing translations by entry index and language.
+o	If absent, translate with  or MarianMT  then store in cache.
+o	Format responses for readability (e.g., “Observation: … Solution: …”).
+•	Outcome: Accurate responses with minimal latency.
+Step 7: Integrate with the Current System
+•	Objective: Upgrade the existing chatbot infrastructure.
+•	Action: Integrate embeddings, hybrid search, and translation pipeline.
+•	Details: 
+o	Replace old FAISS indices with the new single index.
+o	Update backend to handle hybrid search, filtering, and translation caching.
+o	Ensure frontend sends query, project ID, and optional filters (e.g., problemcode).
+•	Outcome: A seamless, enhanced chatbot system.
+Step 8: Test and Refine
+•	Objective: Optimize performance and evaluate multivector approach.
+•	Action: Test with real-world queries and refine the system.
+•	Details: 
+o	Measure retrieval accuracy (precision, recall, MRR) for single-vector pipeline.
+o	Test multivector approach: Use separate embeddings from multi_embeddings.pkl to compare retrieval performance.
+o	Validate translation quality (BLEU scores, native speaker review) for DeepL and MarianMT.
+o	Optimize FAISS (e.g., switch to IndexIVFFlat) and caching for speed.
+•	Outcome: A deployment-ready chatbot with insights on single vs. multivector embeddings.
+•	Step 9: Handling new entries
+Objective: create a function that will preprocess the new entries and append it to existing knowledge base then store embedding.
+
