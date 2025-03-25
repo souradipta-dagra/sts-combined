@@ -1,0 +1,2229 @@
+# ## Document Control
+# 
+# |AUTHOR          |DATE               |REASON                                                             |VERSION|
+# |----------------|-------------------|-------------------------------------------------------------------|-------|
+# |Anjali Gupta    |27-Mar-2023        |API to respond search results on 4 column                          | 4.0   |
+# 
+# 
+# 
+# ### Description
+#    - This program will perform semantic search on the given project 
+#    - Prepares the columns dynamically for that requested project
+# ________________________________________________________________________________________________________________ #
+# import warnings filter
+from warnings import simplefilter
+import warnings
+from pandas.core.common import SettingWithCopyWarning
+# ignore all future warnings
+simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
+
+# ignore all caught warnings
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore")
+    
+import ast
+import dataiku
+import json
+import re
+import pandas as pd, numpy as np
+from dataiku import pandasutils as pdu
+import os
+from statistics import mean
+import numpy as np
+
+import dataiku
+import pandas as pd
+
+import dataiku
+import time
+import datetime
+import pandas as pd, numpy as np
+from dataiku import pandasutils as pdu
+
+
+import multiprocessing
+from multiprocessing import Pool
+import functools, multiprocessing
+from scipy import sparse
+from api_keys import host,apiKey
+
+import nltk
+nltk.download('stopwords')
+nltk.download('averaged_perceptron_tagger')
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from nltk.tag import pos_tag
+from multiprocessing import Pool
+from contextlib import contextmanager
+from functools import partial
+
+import requests
+import json
+import string
+import random
+from itertools import chain
+import math
+import csv
+import time
+import operator
+from collections import Counter
+from collections import defaultdict
+import pandas as pd
+
+import multiprocessing
+import pandas as pd
+import numpy as np
+from multiprocessing import Pool
+import scipy.sparse as sp
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+from dataiku.apinode import utils
+
+#Load functions from project library cosine_sim
+from cosine_sim import cosine_pool,clean_query,str_tagged,lst_to_str,solution_extract,api_py_sql_query
+from translate import get_translation
+
+import faiss
+import pickle
+
+stop = stopwords.words('english') + list(string.punctuation)
+from nltk import word_tokenize
+from cosine_sim import api_py_sql_query
+
+from sentence_transformers import SentenceTransformer
+
+def vector_search(query, ind,tf1, num_results=50):
+    """Tranforms query to vector using a pretrained, sentence-level
+    DistilBERT model and finds similar vectors using FAISS.
+    
+    Args:
+        query (str): User query that should be more than a sentence long.
+        tf1(sentence_transformers.SentenceTransformer.SentenceTransformer)
+        ind(`numpy.ndarray`): FAISS index that needs to be deserialized.
+        num_results (int): Number of results to return.
+    
+    Returns:
+        D (:obj:`numpy.array` of `float`): Distance between results and query.
+        I (:obj:`numpy.array` of `int`): Paper ID of the results.
+    
+    """
+    vector = tf1.transform(query)
+    vector = vector.toarray()
+    D, I = ind.search(np.array(vector).astype("float32"), k=num_results)
+#     threshold = 0.95
+#     limits, D, I= ind.range_search(x=np.array(vector).astype("float32"), thresh=threshold)
+    return D, I
+
+
+
+
+def id2details(df, I, column):
+    """Returns the paper titles based on the paper index."""
+    return [list(df[df.obs_id == idx][column]) for idx in I[0]]
+
+
+def fun_conv2df(res_dic):
+    col_df = pd.DataFrame(res_dic[0]["columns"] )
+    res_df = pd.DataFrame(data=res_dic[0]["rows"],columns=col_df["name"])
+
+def fetch_data(SQLENDPOINT,param,df):    
+    result = api_py_sql_query(SQL_ENDPOINT=SQLENDPOINT,parameter=param)
+    col_df = pd.DataFrame(result[0]["columns"])
+    df = df.append(pd.DataFrame(data=result[0]["rows"],columns=col_df["name"]))
+    df.fillna(value="", inplace=True)                        
+    return df
+
+
+   
+sql_enpoints =  {'Panama'          : 'panama_avro',
+                 'Merval'          :'chile_avro',
+                 'Dubai'           : 'dubai_avro',
+                 'U400'            : 'u400_avro',
+                 'Spain'           : 'spain_avro',
+                 'KZ8A'           : 'kaz_8a_avro',
+                 'KZ4AT'          : 'kz4at_avro',
+                 'Italy'           : 'italy_avro',
+                 'Ind_e_loco'      :'india_avro',
+                 "REG2N"           :"REG2N_avro",
+                 "LMRC"            :'lmrc_avro',
+                 "222 - emr"    :'222_emr_avro',
+                 "Net2"          :"net2_avro",
+                 "U400 - lyon"   : "u400_lyon_avro",
+                 "NS16"          : "chile_ns16_avro",
+                 "TiB"           : "tib_avro",
+                 "VLINE RRSMC" : "vline_rrsmc_avro",
+                 "iTAC Nantes"  : "iTac_Nantes_avro",
+                 "REM"          :  "rem_avro"
+                }
+
+
+def api_py_search_function(project, fleet, subsystem, searchtext, databases,problem_cause,country,failure_class,problem_code,functional_location,notifications_number,date,pbs_code,symptom_code,language):
+    dataiku.set_remote_dss(host, apiKey,no_check_certificate=True)
+    dataiku.set_default_project_key("STS_API_AUG_2020_V1_01")
+    
+    if(fleet):
+        fleet = fleet.upper()
+#     problem_cause = problem_cause.upper()
+    if(country):
+        country = country.upper()
+    if(subsystem):
+        subsystem = subsystem.upper()
+    if(failure_class):
+        failure_class = failure_class.upper()
+    if(problem_code):
+        problem_code = problem_code.upper()
+    if(functional_location):
+        functional_location = functional_location.upper()
+    if(notifications_number):
+        notifications_number = notifications_number.upper()
+    if(pbs_code):
+        pbs_code= pbs_code.upper()
+    if(symptom_code):
+        symptom_code = symptom_code.upper()
+    if(language):
+        language= language.upper()
+    if(date):
+        dater = date.split(" to ")
+
+    #Call translation for non-english projects
+    query = searchtext
+    n=80
+
+    if (project != "Dubai") and (project != "Ind_e_loco") and (project != "LMRC") and (project != "VLINE RRSMC") and (project != "Net2") and (project != "222 - emr"):
+    #if (project != "Dubai") and (project != "Ind_e_loco") and (project != "LMRC") and (project != "VLINE RRSMC"):
+        query = get_translation(clean_query(searchtext),'en')
+
+    df = pd.DataFrame()
+    if project =="Merval":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+
+        path_in_obs = os.path.join(folders[1], 'chile_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        
+
+        if((df['problem_code'] == '').all()==False):
+            
+            path_in_pcode = os.path.join(folders[1], 'chile_problem_code_transformers.index') 
+            ind_pcode = faiss.read_index(path_in_pcode)
+        if((df['problem_cause'] == '').all()==False): 
+            path_in_pcause = os.path.join(folders[1], 'chile_problem_cause_transformers.index') 
+            ind_pcause = faiss.read_index(path_in_pcause)
+        
+        
+        path_in_sol = os.path.join(folders[1], 'chile_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_pcause)
+        
+    elif project =="U400":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        
+        path_in_obs = os.path.join(folders[2], 'u400_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+
+        if((df['problem_code'] == '').all()==False):
+            
+            path_in_pcode = os.path.join(folders[2], 'u400_problem_code_transformers.index') 
+            ind_pcode = faiss.read_index(path_in_pcode)
+
+        if((df['problem_cause'] == '').all()==False):
+            
+            path_in_pcause = os.path.join(folders[2], 'u400_problem_cause_transformers.index') 
+            ind_pcause = faiss.read_index(path_in_pcause)
+        
+        path_in_sol = os.path.join(folders[2], 'u400_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol)
+
+    elif project =="Spain":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        
+        path_in_obs = os.path.join(folders[3], 'spain_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+
+        if((df['problem_code'] == '').all()==False):
+            
+            path_in_pcode = os.path.join(folders[3], 'spain_problem_code_transformers.index') 
+            ind_pcode = faiss.read_index(path_in_pcode)
+
+        if((df['problem_cause'] == '').all()==False):
+            
+            path_in_pcause = os.path.join(folders[3], 'spain_problem_cause_transformers.index') 
+            ind_pcause = faiss.read_index(path_in_pcause)
+        
+        path_in_sol = os.path.join(folders[3], 'spain_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol) 
+            
+    elif project =="KZ8A":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        #path of index : observation
+        path_in_obs = os.path.join(folders[4], 'kz8a_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        # load tfidf model
+        #path_tf_obs = os.path.join(folders[4], 'kz8a_tfidf_obs.pkl')  
+        #tf1_obs = pickle.load(open(path_tf_obs, 'rb'))   
+
+        if((df['problem_code'] == '').all()==False):
+            path_in_pcode = os.path.join(folders[4], 'kz8a_problem_code_transformers.index') 
+            ind_pcode = faiss.read_index(path_in_pcode)
+            #tf idf model 
+            #path_tf_pcode = os.path.join(folders[4], 'kz8a_tfidf_problem_code.pkl')  
+            #tf1_pcode = pickle.load(open(path_tf_pcode, 'rb')) 
+
+        if((df['problem_cause'] == '').all()==False):
+            path_in_pcause = os.path.join(folders[4], 'kz8a_problem_cause_transformers.index') 
+            ind_pcause = faiss.read_index(path_in_pcause)
+            # tf idf
+            #path_tf_pcause = os.path.join(folders[4], 'kz8a_tfidf_problem_cause.pkl')  
+            #tf1_pcause = pickle.load(open(path_tf_pcause, 'rb')) 
+        # solution   
+        path_in_sol = os.path.join(folders[4], 'kz8a_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol) 
+        # tf idf
+        #path_tf_sol = os.path.join(folders[4], 'kz8a_tfidf_solution.pkl')  
+        #tf1_sol = pickle.load(open(path_tf_sol, 'rb')) 
+
+    elif project =="KZ4AT":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        #path of index : observation
+        path_in_obs = os.path.join(folders[5], 'kz4at_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        # load tfidf model
+        #path_tf_obs = os.path.join(folders[5], 'kz4at_tfidf_obs.pkl')  
+        #tf1_obs = pickle.load(open(path_tf_obs, 'rb'))   
+
+        if((df['problem_code'] == '').all()==False):
+            path_in_pcode = os.path.join(folders[5], 'kz4at_problem_code_transformers.index') 
+            ind_pcode = faiss.read_index(path_in_pcode)
+            #tf idf model 
+            #path_tf_pcode = os.path.join(folders[5], 'kz4at_tfidf_problem_code.pkl')  
+            #tf1_pcode = pickle.load(open(path_tf_pcode, 'rb')) 
+
+        if((df['problem_cause'] == '').all()==False):
+            path_in_pcause = os.path.join(folders[5], 'kz4at_problem_cause_transformers.index') 
+            ind_pcause = faiss.read_index(path_in_pcause)
+            # tf idf
+            #path_tf_pcause = os.path.join(folders[5], 'kz4at_tfidf_problem_cause.pkl')  
+            #tf1_pcause = pickle.load(open(path_tf_pcause, 'rb')) 
+        # solution   
+        path_in_sol = os.path.join(folders[5], 'kz4at_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol) 
+        # tf idf
+        #path_tf_sol = os.path.join(folders[5], 'kz4at_tfidf_solution.pkl')  
+        #tf1_sol = pickle.load(open(path_tf_sol, 'rb'))                          
+                                  
+    elif project =="Italy":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        #path of index : observation
+        path_in_obs = os.path.join(folders[6], 'italy_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        # load tfidf model
+        #path_tf_obs = os.path.join(folders[6], 'italy_tfidf_obs.pkl')  
+        #tf1_obs = pickle.load(open(path_tf_obs, 'rb'))   
+
+        if((df['problem_code'] == '').all()==False):
+            path_in_pcode = os.path.join(folders[6], 'italy_problem_code_transformers.index') 
+            ind_pcode = faiss.read_index(path_in_pcode)
+            #tf idf model 
+            #path_tf_pcode = os.path.join(folders[6], 'italy_tfidf_problem_code.pkl')  
+            #tf1_pcode = pickle.load(open(path_tf_pcode, 'rb')) 
+
+        if((df['problem_cause'] == '').all()==False):
+            path_in_pcause = os.path.join(folders[6], 'italy_problem_cause_transformers.index') 
+            ind_pcause = faiss.read_index(path_in_pcause)
+            # tf idf
+            #path_tf_pcause = os.path.join(folders[6], 'italy_tfidf_problem_cause.pkl')  
+            #tf1_pcause = pickle.load(open(path_tf_pcause, 'rb')) 
+        # solution   
+        path_in_sol = os.path.join(folders[6], 'italy_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol) 
+        # tf idf
+        #path_tf_sol = os.path.join(folders[6], 'italy_tfidf_solution.pkl')  
+        #tf1_sol = pickle.load(open(path_tf_sol, 'rb'))        
+        
+    elif project =="Ind_e_loco":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+#         handle = dataiku.Folder("CviMd4Rf")
+#         path = handle.get_path()
+#         folders = [1,2,3,4,5,6,7,path]
+        #path of index : observation
+        path_in_obs = os.path.join(folders[7], 'india_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+         # load tfidf model
+        #path_tf_obs = os.path.join(folders[7], 'india_tfidf_obs.pkl')  
+        #tf1_obs = pickle.load(open(path_tf_obs, 'rb'))   
+        
+        if((df['problem_code'] == '').all()==False):
+            path_in_pcode = os.path.join(folders[7], 'india_problem_code_transformers.index') 
+            ind_pcode = faiss.read_index(path_in_pcode)
+            #tf idf model 
+            #path_tf_pcode = os.path.join(folders[7], 'india_tfidf_problem_code.pkl')  
+            #tf1_pcode = pickle.load(open(path_tf_pcode, 'rb')) 
+            
+        if((df['problem_cause'] == '').all()==False):
+            path_in_pcause = os.path.join(folders[7], 'india_problem_cause_transformers.index') 
+            ind_pcause = faiss.read_index(path_in_pcause)
+            # tf idf
+            #path_tf_pcause = os.path.join(folders[7], 'india_tfidf_problem_cause.pkl')  
+            #tf1_pcause = pickle.load(open(path_tf_pcause, 'rb')) 
+        # solution   
+        path_in_sol = os.path.join(folders[7], 'india_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol) 
+        # tf idf
+        #path_tf_sol = os.path.join(folders[7], 'india_tfidf_solution.pkl')  
+        #tf1_sol = pickle.load(open(path_tf_sol, 'rb')) 
+
+        
+                                  
+    elif project =="REG2N":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        #path of index : observation
+        path_in_obs = os.path.join(folders[8], 'REG2N_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        # load tfidf model
+        #path_tf_obs = os.path.join(folders[8], 'REG2N_tfidf_obs.pkl')  
+        #tf1_obs = pickle.load(open(path_tf_obs, 'rb'))   
+
+        if((df['problem_code'] == '').all()==False):
+            path_in_pcode = os.path.join(folders[8], 'REG2N_problem_code_transformers.index') 
+            ind_pcode = faiss.read_index(path_in_pcode)
+            #tf idf model 
+            #path_tf_pcode = os.path.join(folders[8], 'REG2N_tfidf_problem_code.pkl')  
+            #tf1_pcode = pickle.load(open(path_tf_pcode, 'rb')) 
+
+        if((df['problem_cause'] == '').all()==False):
+            path_in_pcause = os.path.join(folders[8], 'REG2N_problem_cause_transformers.index') 
+            ind_pcause = faiss.read_index(path_in_pcause)
+            # tf idf
+            #path_tf_pcause = os.path.join(folders[8], 'REG2N_tfidf_problem_cause.pkl')  
+            #tf1_pcause = pickle.load(open(path_tf_pcause, 'rb')) 
+        # solution   
+        path_in_sol = os.path.join(folders[8], 'REG2N_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol) 
+        # tf idf
+        #path_tf_sol = os.path.join(folders[8], 'REG2N_tfidf_solution.pkl')  
+        #tf1_sol = pickle.load(open(path_tf_sol, 'rb')) 
+                                  
+    elif project =="LMRC":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        #path of index : observation
+        path_in_obs = os.path.join(folders[9], 'lmrc_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        # load tfidf model
+        #path_tf_obs = os.path.join(folders[9], 'lmrc_tfidf_obs.pkl')  
+        #tf1_obs = pickle.load(open(path_tf_obs, 'rb'))   
+
+        if((df['problem_code'] == '').all()==False):
+            path_in_pcode = os.path.join(folders[9], 'lmrc_problem_code_transformers.index') 
+            ind_pcode = faiss.read_index(path_in_pcode)
+            #tf idf model 
+            #path_tf_pcode = os.path.join(folders[9], 'lmrc_tfidf_problem_code.pkl')  
+            #tf1_pcode = pickle.load(open(path_tf_pcode, 'rb')) 
+
+        if((df['problem_cause'] == '').all()==False):
+            path_in_pcause = os.path.join(folders[9], 'lmrc_problem_cause_transformers.index') 
+            ind_pcause = faiss.read_index(path_in_pcause)
+            # tf idf
+            #path_tf_pcause = os.path.join(folders[9], 'lmrc_tfidf_problem_cause.pkl')  
+            #tf1_pcause = pickle.load(open(path_tf_pcause, 'rb')) 
+        # solution   
+        path_in_sol = os.path.join(folders[9], 'lmrc_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol) 
+        # tf idf
+        #path_tf_sol = os.path.join(folders[9], 'lmrc_tfidf_solution.pkl')  
+        #tf1_sol = pickle.load(open(path_tf_sol, 'rb')) 
+
+    elif project =="Dubai":
+           # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        #path of index : observation
+        path_in_obs = os.path.join(folders[0], 'dubai_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        # load tfidf model
+        #path_tf_obs = os.path.join(folders[0], 'dubai_tfidf_obs.pkl')  
+        #tf1_obs = pickle.load(open(path_tf_obs, 'rb'))   
+
+        if((df['problem_code'] == '').all()==False):
+            path_in_pcode = os.path.join(folders[0], 'dubai_problem_code_transformers.index') 
+            ind_pcode = faiss.read_index(path_in_pcode)
+            #tf idf model 
+            #path_tf_pcode = os.path.join(folders[0], 'dubai_tfidf_problem_code.pkl')  
+            #tf1_pcode = pickle.load(open(path_tf_pcode, 'rb')) 
+
+        if((df['problem_cause'] == '').all()==False):
+            path_in_pcause = os.path.join(folders[0], 'dubai_problem_cause_transformers.index') 
+            ind_pcause = faiss.read_index(path_in_pcause)
+            # tf idf
+            #path_tf_pcause = os.path.join(folders[0], 'dubai_tfidf_problem_cause.pkl')  
+            #tf1_pcause = pickle.load(open(path_tf_pcause, 'rb')) 
+        # solution   
+        path_in_sol = os.path.join(folders[0], 'dubai_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol) 
+        # tf idf
+        #path_tf_sol = os.path.join(folders[0], 'dubai_tfidf_solution.pkl')  
+        #tf1_sol = pickle.load(open(path_tf_sol, 'rb')) 
+                                  
+    elif project =="Panama":
+           # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        #path of index : observation
+        path_in_obs = os.path.join(folders[10], 'panama_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        # load tfidf model
+        #path_tf_obs = os.path.join(folders[10], 'panama_tfidf_obs.pkl')  
+        #tf1_obs = pickle.load(open(path_tf_obs, 'rb'))   
+
+        if((df['problem_code'] == '').all()==False):
+            path_in_pcode = os.path.join(folders[10], 'panama_problem_code_transformers.index') 
+            ind_pcode = faiss.read_index(path_in_pcode)
+            #tf idf model 
+            #path_tf_pcode = os.path.join(folders[10], 'panama_tfidf_problem_code.pkl')  
+            #tf1_pcode = pickle.load(open(path_tf_pcode, 'rb')) 
+
+        if((df['problem_cause'] == '').all()==False):
+            path_in_pcause = os.path.join(folders[10], 'panama_problem_cause_transformers.index') 
+            ind_pcause = faiss.read_index(path_in_pcause)
+            # tf idf
+            #path_tf_pcause = os.path.join(folders[10], 'panama_tfidf_problem_cause.pkl')  
+            #tf1_pcause = pickle.load(open(path_tf_pcause, 'rb')) 
+        # solution   
+        path_in_sol = os.path.join(folders[10], 'panama_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol) 
+        # tf idf
+        #path_tf_sol = os.path.join(folders[10], 'panama_tfidf_solution.pkl')  
+        #tf1_sol = pickle.load(open(path_tf_sol, 'rb')) 
+    elif project =="222 - emr":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        #path of index : observation
+        path_in_obs = os.path.join(folders[11], '222_emr_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        # load tfidf model
+        #path_tf_obs = os.path.join(folders[11], '222_emr_tfidf_obs.pkl')  
+        #tf1_obs = pickle.load(open(path_tf_obs, 'rb'))   
+
+        if((df['problem_code'] == '').all()==False):
+            path_in_pcode = os.path.join(folders[11], '222_emr_problem_code_transformers.index') 
+            ind_pcode = faiss.read_index(path_in_pcode)
+            #tf idf model 
+            #path_tf_pcode = os.path.join(folders[11], '222_emr_tfidf_problem_code.pkl')  
+            #tf1_pcode = pickle.load(open(path_tf_pcode, 'rb')) 
+
+        if((df['problem_cause'] == '').all()==False):
+            path_in_pcause = os.path.join(folders[11], '222_emr_problem_cause_transformers.index') 
+            ind_pcause = faiss.read_index(path_in_pcause)
+            # tf idf
+            #path_tf_pcause = os.path.join(folders[11], '222_emr_tfidf_problem_cause.pkl')  
+            #tf1_pcause = pickle.load(open(path_tf_pcause, 'rb')) 
+        # solution   
+        path_in_sol = os.path.join(folders[11], '222_emr_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol) 
+        # tf idf
+        #path_tf_sol = os.path.join(folders[11], '222_emr_tfidf_solution.pkl')  
+        #tf1_sol = pickle.load(open(path_tf_sol, 'rb'))    
+    elif project =="Net2":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        #path of index : observation
+        #path_in_obs = os.path.join(folders[12], 'net2_obs.index') 
+        #ind_obs = faiss.read_index(path_in_obs)
+        
+        path_in_obs = os.path.join(folders[12], 'net2_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        
+        # load tfidf model
+        #path_tf_obs = os.path.join(folders[12], 'net2_tfidf_obs.pkl')  
+        #tf1_obs = pickle.load(open(path_tf_obs, 'rb'))   
+
+        #if((df['problem_code'] == '').all()==False):
+            #path_in_pcode = os.path.join(folders[12], 'net2_problem_code.index') 
+            #ind_pcode = faiss.read_index(path_in_pcode)
+            
+        path_in_pcode = os.path.join(folders[12], 'net2_problem_code_transformers.index') 
+        ind_pcode = faiss.read_index(path_in_pcode)
+            
+            #tf idf model 
+            #path_tf_pcode = os.path.join(folders[12], 'net2_tfidf_problem_code.pkl')  
+            #tf1_pcode = pickle.load(open(path_tf_pcode, 'rb')) 
+
+        #if((df['problem_cause'] == '').all()==False):
+            #path_in_pcause = os.path.join(folders[12], 'net2_problem_cause.index') 
+            #ind_pcause = faiss.read_index(path_in_pcause)
+            
+        path_in_pcause = os.path.join(folders[12], 'net2_problem_cause_transformers.index') 
+        ind_pcause = faiss.read_index(path_in_pcause)
+            
+            # tf idf
+            #path_tf_pcause = os.path.join(folders[12], 'net2_tfidf_problem_cause.pkl')  
+            #tf1_pcause = pickle.load(open(path_tf_pcause, 'rb')) 
+        # solution   
+        #path_in_sol = os.path.join(folders[12], 'net2_solution.index') 
+        #ind_sol = faiss.read_index(path_in_sol)
+        
+        path_in_sol = os.path.join(folders[12], 'net2_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol)
+        
+        # tf idf
+        #path_tf_sol = os.path.join(folders[12], 'net2_tfidf_solution.pkl')  
+        #tf1_sol = pickle.load(open(path_tf_sol, 'rb')) 
+        
+    elif project == "U400 - lyon":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        #path of index : observation
+        #path_in_obs = os.path.join(folders[13], 'U400_lyon_obs.index') 
+        #ind_obs = faiss.read_index(path_in_obs)
+        
+        path_in_obs = os.path.join(folders[13], 'U400_lyon_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        
+        path_in_pcode = os.path.join(folders[13], 'U400_lyon_problem_code_transformers.index') 
+        ind_pcode = faiss.read_index(path_in_pcode)
+        
+        path_in_pcause = os.path.join(folders[13], 'U400_lyon_problem_cause_transformers.index') 
+        ind_pcause = faiss.read_index(path_in_pcause)
+        
+        path_in_sol = os.path.join(folders[13], 'U400_lyon_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol)
+        
+    elif project == "NS16":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        
+        path_in_obs = os.path.join(folders[14], 'chile_ns16_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        
+        path_in_pcode = os.path.join(folders[14], 'chile_ns16_problem_code_transformers.index') 
+        ind_pcode = faiss.read_index(path_in_pcode)
+        
+        path_in_pcause = os.path.join(folders[14], 'chile_ns16_problem_cause_transformers.index') 
+        ind_pcause = faiss.read_index(path_in_pcause)
+        
+        path_in_sol = os.path.join(folders[14], 'chile_ns16_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol)
+        
+    elif project == "TiB":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        
+        path_in_obs = os.path.join(folders[15], 'tib_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        
+        path_in_pcode = os.path.join(folders[15], 'tib_problem_code_transformers.index') 
+        ind_pcode = faiss.read_index(path_in_pcode)
+        
+        path_in_pcause = os.path.join(folders[15], 'tib_problem_cause_transformers.index') 
+        ind_pcause = faiss.read_index(path_in_pcause)
+        
+        path_in_sol = os.path.join(folders[15], 'tib_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol)
+        
+    elif project == "VLINE RRSMC":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        
+        path_in_obs = os.path.join(folders[16], 'vline_rrsmc_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        
+        path_in_pcode = os.path.join(folders[16], 'vline_rrsmc_problem_code_transformers.index') 
+        ind_pcode = faiss.read_index(path_in_pcode)
+        
+        path_in_pcause = os.path.join(folders[16], 'vline_rrsmc_problem_cause_transformers.index') 
+        ind_pcause = faiss.read_index(path_in_pcause)
+        
+        path_in_sol = os.path.join(folders[16], 'vline_rrsmc_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol)
+    
+    elif project == "iTAC Nantes":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        
+        path_in_obs = os.path.join(folders[17], 'iTac_Nantes_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        
+        path_in_pcode = os.path.join(folders[17], 'iTac_Nantes_problem_code_transformers.index') 
+        ind_pcode = faiss.read_index(path_in_pcode)
+        
+        path_in_pcause = os.path.join(folders[17], 'iTac_Nantes_problem_cause_transformers.index') 
+        ind_pcause = faiss.read_index(path_in_pcause)
+        
+        path_in_sol = os.path.join(folders[17], 'iTac_Nantes_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol)
+        
+    elif project == "REM":
+         # dataframe 
+        dataset = dataiku.Dataset(f'{sql_enpoints[project]}')
+        df = dataset.get_dataframe(keep_default_na=False)
+        s = len(df)
+        
+        path_in_obs = os.path.join(folders[18], 'rem_obs_transformers.index') 
+        ind_obs = faiss.read_index(path_in_obs)
+        
+        path_in_pcode = os.path.join(folders[18], 'rem_problem_code_transformers.index') 
+        ind_pcode = faiss.read_index(path_in_pcode)
+        
+        path_in_pcause = os.path.join(folders[18], 'rem_problem_cause_transformers.index') 
+        ind_pcause = faiss.read_index(path_in_pcause)
+        
+        path_in_sol = os.path.join(folders[18], 'rem_solution_transformers.index') 
+        ind_sol = faiss.read_index(path_in_sol)
+       
+        
+    df = df[df['database'].isin(databases)]
+
+#     df.drop(labels=["obs_translated","solution_translated",""],axis=1,inplace=True)
+    df['obs_id'] = df['obs_id'].astype('str')
+    df["fleet"].fillna(value="NA",inplace=True)
+    df.reset_index(drop=True,inplace=True)
+
+    df_clean = df.copy()
+
+    # Querying the index
+    df_clean.reset_index(inplace = True,drop = True)
+    
+    s_col = ['ind_obs','ind_pcause','ind_pcode','ind_sol']
+    s_col_name = ['observation','problem_cause','problem_code','solution']
+    
+#     df_final = pd.DataFrame()
+    response_dict = {}
+    #observation search
+    
+    #===================================================================================
+    ### Net2 ###
+    if project =="Net2":
+        encoder = SentenceTransformer("all-MiniLM-L12-v2")
+        
+        # OBSERVATION SEARCH #
+        xq = encoder.encode(query) 
+        #k = ind_obs.ntotal
+        if ind_obs.ntotal < 150:
+            n = ind_obs.ntotal
+        else:
+            n = 150
+        D, I = ind_obs.search(np.array([xq]), k=n)
+        
+        if(set(np.round(D[0],1)) == {1.0}):
+            df_final1 = pd.DataFrame()
+            response_dict['observation_results']={} 
+        elif(set(np.round(D[0],1)) == {0.0}):
+            df_final1 = pd.DataFrame()
+            response_dict['observation_results']={} 
+        else:
+            df_c = df_clean.copy()
+            list_string = list(map(str, I[0]))
+            ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+            flat_ind=[item for sublist in ind_df for item in sublist]
+            df_c = df_c.iloc[flat_ind]
+            df_d = df_c.reindex(flat_ind)
+            df_final1 = df_d.reset_index(drop = True)
+            df_final1['distance'] = np.resize(D, df_final1.shape[0])
+            df_final1 = df_final1[df_final1['distance']<1.99]
+            df_final1 = df_final1.reset_index(drop = True)
+
+            if fleet != "NA":
+                df_final1 = df_final1[df_final1.fleet == fleet]
+            if subsystem != "NA":
+                df_final1 = df_final1[df_final1.subsystem == subsystem]	
+            if country != "NA":
+                df_final1 = df_final1[df_final1.country == country]
+            if failure_class != "NA":
+                df_final1 = df_final1[df_final1.failure_class == failure_class]	
+            if problem_code != "NA":
+                df_final1 = df_final1[df_final1.problem_code == problem_code]
+            if functional_location != "NA":
+                df_final1 = df_final1[df_final1.functional_location == functional_location]	
+            if notifications_number != "NA":
+                df_final1 = df_final1[df_final1.notifications_number == notifications_number]
+            if pbs_code != "NA":
+                df_final1 = df_final1[df_final1.pbs_code == pbs_code]
+            if symptom_code != "NA":
+                df_final1 = df_final1[df_final1.symptom_code == symptom_code]
+            if language != "NA":
+                df_final1 = df_final1[df_final1.language == language]
+            if date != "NA":
+                df_final1['date'] = df_final1['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                df_final1 = df_final1[(df_final1['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final1['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                df_final1['date'] = df_final1['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+            if problem_cause != "NA":
+                df_final1 = df_final1[df_final1.problem_cause == problem_cause]
+
+            rank = np.arange(1,len(df_final1)+1)
+            df_final1['ranking'] = rank
+            df_final1.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+            df_final1["frequency_obs"] = pd.to_numeric(df_final1["frequency_obs"], downcast="float")
+            df_final1["frequency_sol"] = pd.to_numeric(df_final1["frequency_sol"], downcast="float")
+            df_final1["frequency_obs"] = df_final1["frequency_obs"].apply(lambda x:np.round(x,2))
+            df_final1["frequency_sol"] = df_final1["frequency_sol"].apply(lambda x:np.round(x,2))
+
+            df_final1["resource"].fillna(value=0,inplace=True)
+            df_final1['resource'] = pd.to_numeric(df_final1['resource'], downcast='integer')
+            df_final1.fillna(value=0,inplace=True)
+            obs_dict = df_final1.to_dict(orient="records")
+            response_dict['observation_results'] = obs_dict
+            if(df_final1.empty==True):
+                response_dict['observation_results']={}
+                
+        # PROBLEM CAUSE SEARCH #
+        xq = encoder.encode(query) 
+        #k = ind_pcause.ntotal
+        if((df['problem_cause'] == '').all()==False):
+            if ind_pcause.ntotal < 150:
+                n = ind_pcause.ntotal
+            else:
+                n = 150
+            D, I = ind_pcause.search(np.array([xq]), k=n)
+            if(set(np.round(D[0],1)) == {1.0}):
+                df_final2 = pd.DataFrame()
+                response_dict['problem_cause_results']={} 
+            elif(set(np.round(D[0],1)) == {0.0}):
+                df_final2 = pd.DataFrame()
+                response_dict['problem_cause_results']={} 
+            else:
+                df_c = df_clean.copy()
+                list_string = list(map(str, I[0]))
+                ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+                flat_ind=[item for sublist in ind_df for item in sublist]
+                df_c = df_c.iloc[flat_ind]
+                df_d = df_c.reindex(flat_ind)
+                df_final2 = df_d.reset_index(drop = True)
+                df_final2['distance'] = np.resize(D, df_final2.shape[0])
+                df_final2 = df_final2[df_final2['distance']<1.99]
+                df_final2 = df_final2.reset_index(drop = True)
+
+                if fleet != "NA":
+                    df_final2 = df_final2[df_final2.fleet == fleet]
+                if subsystem != "NA":
+                    df_final2 = df_final2[df_final2.subsystem == subsystem]	
+                if country != "NA":
+                    df_final2 = df_final2[df_final2.country == country]
+                if failure_class != "NA":
+                    df_final2 = df_final2[df_final2.failure_class == failure_class]	
+                if problem_code != "NA":
+                    df_final2 = df_final2[df_final2.problem_code == problem_code]
+                if functional_location != "NA":
+                    df_final2 = df_final2[df_final2.functional_location == functional_location]	
+                if notifications_number != "NA":
+                    df_final2 = df_final2[df_final2.notifications_number == notifications_number]
+                if pbs_code != "NA":
+                    df_final2 = df_final2[df_final2.pbs_code == pbs_code]
+                if symptom_code != "NA":
+                    df_final2 = df_final2[df_final2.symptom_code == symptom_code]
+                if language != "NA":
+                    df_final2 = df_final2[df_final2.language == language]
+                if date != "NA":
+                    df_final2['date'] = df_final2['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                    df_final2 = df_final2[(df_final2['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final2['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                    df_final2['date'] = df_final2['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+                if problem_cause != "NA":
+                    df_final2 = df_final2[df_final2.problem_cause == problem_cause]
+
+
+
+                rank = np.arange(1,len(df_final2)+1)
+                df_final2['ranking'] = rank
+                df_final2.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+                df_final2["frequency_obs"] = pd.to_numeric(df_final2["frequency_obs"], downcast="float")
+                df_final2["frequency_sol"] = pd.to_numeric(df_final2["frequency_sol"], downcast="float")
+                df_final2["frequency_obs"] = df_final2["frequency_obs"].apply(lambda x:np.round(x,2))
+                df_final2["frequency_sol"] = df_final2["frequency_sol"].apply(lambda x:np.round(x,2))
+
+                df_final2["resource"].fillna(value=0,inplace=True)
+                df_final2['resource'] = pd.to_numeric(df_final2['resource'], downcast='integer')
+                df_final2.fillna(value=0,inplace=True)
+                pcause_dict = df_final2.to_dict(orient="records")
+                response_dict['problem_cause_results'] = pcause_dict
+                if(df_final2.empty==True):
+                    response_dict['problem_cause_results']={}
+
+        else:
+            df_final2 = pd.DataFrame()
+            response_dict['problem_cause_results']={}
+                
+        # PROBLEM CODE SEARCH #
+        xq = encoder.encode(query) 
+        #k = ind_pcode.ntotal
+        if((df['problem_code'] == '').all()==False):
+            if ind_pcode.ntotal < 150:
+                n = ind_pcode.ntotal
+            else:
+                n = 150
+            D, I = ind_pcode.search(np.array([xq]), k=n)
+            if(set(np.round(D[0],1)) == {1.0}):
+                df_final3 = pd.DataFrame()
+                response_dict['problem_code_results']={} 
+            elif(set(np.round(D[0],1)) == {0.0}):
+                df_final3 = pd.DataFrame()
+                response_dict['problem_code_results']={} 
+            else:
+                df_c = df_clean.copy()
+                list_string = list(map(str, I[0]))
+                ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+                flat_ind=[item for sublist in ind_df for item in sublist]
+                df_c = df_c.iloc[flat_ind]
+                df_d = df_c.reindex(flat_ind)
+                df_final3 = df_d.reset_index(drop = True)
+                df_final3['distance'] = np.resize(D, df_final3.shape[0])
+                df_final3 = df_final3[df_final3['distance']<1.99]
+                df_final3 = df_final3.reset_index(drop = True)
+
+                if fleet != "NA":
+                    df_final3 = df_final3[df_final3.fleet == fleet]
+                if subsystem != "NA":
+                    df_final3 = df_final3[df_final3.subsystem == subsystem]	
+                if country != "NA":
+                    df_final3 = df_final3[df_final3.country == country]
+                if failure_class != "NA":
+                    df_final3 = df_final3[df_final3.failure_class == failure_class]	
+                if problem_code != "NA":
+                    df_final3 = df_final3[df_final3.problem_code == problem_code]
+                if functional_location != "NA":
+                    df_final3 = df_final3[df_final3.functional_location == functional_location]	
+                if notifications_number != "NA":
+                    df_final3 = df_final3[df_final3.notifications_number == notifications_number]
+                if pbs_code != "NA":
+                    df_final3 = df_final3[df_final3.pbs_code == pbs_code]
+                if symptom_code != "NA":
+                    df_final3 = df_final3[df_final3.symptom_code == symptom_code]
+                if language != "NA":
+                    df_final3 = df_final3[df_final3.language == language]
+                if date != "NA":
+                    df_final3['date'] = df_final3['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                    df_final3 = df_final3[(df_final3['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final3['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                    df_final3['date'] = df_final3['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+                if problem_cause != "NA":
+                    df_final3 = df_final3[df_final3.problem_cause == problem_cause]
+
+                rank = np.arange(1,len(df_final3)+1)
+                df_final3['ranking'] = rank
+                df_final3.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+                df_final3["frequency_obs"] = pd.to_numeric(df_final3["frequency_obs"], downcast="float")
+                df_final3["frequency_sol"] = pd.to_numeric(df_final3["frequency_sol"], downcast="float")
+                df_final3["frequency_obs"] = df_final3["frequency_obs"].apply(lambda x:np.round(x,2))
+                df_final3["frequency_sol"] = df_final3["frequency_sol"].apply(lambda x:np.round(x,2))
+
+                df_final3["resource"].fillna(value=0,inplace=True)
+                df_final3['resource'] = pd.to_numeric(df_final3['resource'], downcast='integer')
+                df_final3.fillna(value=0,inplace=True)
+                pcode_dict = df_final3.to_dict(orient="records")
+                response_dict['problem_code_results'] = pcode_dict
+                if(df_final3.empty==True):
+                    response_dict['problem_code_results']={} 
+                    
+        else:
+            df_final3 = pd.DataFrame()
+            response_dict['problem_code_results']={}
+            
+        # SOLUTION SEARCH #
+        xq = encoder.encode(query) 
+        #k = ind_sol.ntotal
+        if ind_sol.ntotal < 150:
+            n = ind_sol.ntotal
+        else:
+            n = 150
+        D, I = ind_sol.search(np.array([xq]), k=n)
+        if(set(np.round(D[0],1)) == {1.0}):
+            df_final4 = pd.DataFrame()
+            response_dict['solution_results']={} 
+        elif(set(np.round(D[0],1)) == {0.0}):
+            df_final4 = pd.DataFrame()
+            response_dict['solution_results']={} 
+        else:
+            df_c = df_clean.copy()
+            list_string = list(map(str, I[0]))
+            ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+            flat_ind=[item for sublist in ind_df for item in sublist]
+            df_c = df_c.iloc[flat_ind]
+            df_d = df_c.reindex(flat_ind)
+            df_final4 = df_d.reset_index(drop = True)
+            df_final4['distance'] = np.resize(D, df_final4.shape[0])
+            df_final4 = df_final4[df_final4['distance']<1.99]
+            df_final4 = df_final4.reset_index(drop = True)
+            
+            if fleet != "NA":
+                df_final4 = df_final4[df_final4.fleet == fleet]
+            if subsystem != "NA":
+                df_final4 = df_final4[df_final4.subsystem == subsystem]	
+            if country != "NA":
+                df_final4 = df_final4[df_final4.country == country]
+            if failure_class != "NA":
+                df_final4 = df_final4[df_final4.failure_class == failure_class]	
+            if problem_code != "NA":
+                df_final4 = df_final4[df_final4.problem_code == problem_code]
+            if functional_location != "NA":
+                df_final4 = df_final4[df_final4.functional_location == functional_location]	
+            if notifications_number != "NA":
+                df_final4 = df_final4[df_final4.notifications_number == notifications_number]
+            if pbs_code != "NA":
+                df_final4 = df_final4[df_final4.pbs_code == pbs_code]
+            if symptom_code != "NA":
+                df_final4 = df_final4[df_final4.symptom_code == symptom_code]
+            if language != "NA":
+                df_final4 = df_final4[df_final4.language == language]
+            if date != "NA":
+                df_final4['date'] = df_final4['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                df_final4 = df_final4[(df_final4['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final4['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                df_final4['date'] = df_final4['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+            if problem_cause != "NA":
+                df_final4 = df_final4[df_final4.problem_cause == problem_cause]
+
+
+
+            rank = np.arange(1,len(df_final4)+1)
+            df_final4['ranking'] = rank
+            df_final4.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+            df_final4["frequency_obs"] = pd.to_numeric(df_final4["frequency_obs"], downcast="float")
+            df_final4["frequency_sol"] = pd.to_numeric(df_final4["frequency_sol"], downcast="float")
+            df_final4["frequency_obs"] = df_final4["frequency_obs"].apply(lambda x:np.round(x,2))
+            df_final4["frequency_sol"] = df_final4["frequency_sol"].apply(lambda x:np.round(x,2))
+
+            df_final4["resource"].fillna(value=0,inplace=True)
+            df_final4['resource'] = pd.to_numeric(df_final4['resource'], downcast='integer')
+            df_final4.fillna(value=0,inplace=True)
+            sol_dict = df_final4.to_dict(orient="records")
+            response_dict['solution_results'] = sol_dict
+            if(df_final4.empty==True):
+                response_dict['solution_results']={}
+            
+        return response_dict
+    
+    ### U400 - lyon ###
+    elif project =="U400 - lyon":
+        encoder = SentenceTransformer("all-MiniLM-L12-v2")
+        
+        # OBSERVATION SEARCH #
+        xq = encoder.encode(query) 
+        #k = ind_obs.ntotal
+        if ind_obs.ntotal < 150:
+            n = ind_obs.ntotal
+        else:
+            n = 150
+        D, I = ind_obs.search(np.array([xq]), k=n)
+        
+        if(set(np.round(D[0],1)) == {1.0}):
+            df_final1 = pd.DataFrame()
+            response_dict['observation_results']={} 
+        elif(set(np.round(D[0],1)) == {0.0}):
+            df_final1 = pd.DataFrame()
+            response_dict['observation_results']={} 
+        else:
+            df_c = df_clean.copy()
+            list_string = list(map(str, I[0]))
+            ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+            flat_ind=[item for sublist in ind_df for item in sublist]
+            df_c = df_c.iloc[flat_ind]
+            df_d = df_c.reindex(flat_ind)
+            df_final1 = df_d.reset_index(drop = True)
+            df_final1['distance'] = np.resize(D, df_final1.shape[0])
+            df_final1 = df_final1[df_final1['distance']<1.99]
+            df_final1 = df_final1.reset_index(drop = True)
+
+            if fleet != "NA":
+                df_final1 = df_final1[df_final1.fleet == fleet]
+            if subsystem != "NA":
+                df_final1 = df_final1[df_final1.subsystem == subsystem]	
+            if country != "NA":
+                df_final1 = df_final1[df_final1.country == country]
+            if failure_class != "NA":
+                df_final1 = df_final1[df_final1.failure_class == failure_class]	
+            if problem_code != "NA":
+                df_final1 = df_final1[df_final1.problem_code == problem_code]
+            if functional_location != "NA":
+                df_final1 = df_final1[df_final1.functional_location == functional_location]	
+            if notifications_number != "NA":
+                df_final1 = df_final1[df_final1.notifications_number == notifications_number]
+            if pbs_code != "NA":
+                df_final1 = df_final1[df_final1.pbs_code == pbs_code]
+            if symptom_code != "NA":
+                df_final1 = df_final1[df_final1.symptom_code == symptom_code]
+            if language != "NA":
+                df_final1 = df_final1[df_final1.language == language]
+            if date != "NA":
+                df_final1['date'] = df_final1['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                df_final1 = df_final1[(df_final1['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final1['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                df_final1['date'] = df_final1['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+            if problem_cause != "NA":
+                df_final1 = df_final1[df_final1.problem_cause == problem_cause]
+
+            rank = np.arange(1,len(df_final1)+1)
+            df_final1['ranking'] = rank
+            df_final1.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+            df_final1["frequency_obs"] = pd.to_numeric(df_final1["frequency_obs"], downcast="float")
+            df_final1["frequency_sol"] = pd.to_numeric(df_final1["frequency_sol"], downcast="float")
+            df_final1["frequency_obs"] = df_final1["frequency_obs"].apply(lambda x:np.round(x,2))
+            df_final1["frequency_sol"] = df_final1["frequency_sol"].apply(lambda x:np.round(x,2))
+
+            df_final1["resource"].fillna(value=0,inplace=True)
+            df_final1['resource'] = pd.to_numeric(df_final1['resource'], downcast='integer')
+            df_final1.fillna(value=0,inplace=True)
+            obs_dict = df_final1.to_dict(orient="records")
+            response_dict['observation_results'] = obs_dict
+            if(df_final1.empty==True):
+                response_dict['observation_results']={}
+                
+        # PROBLEM CAUSE SEARCH #
+        xq = encoder.encode(query) 
+        #k = ind_pcause.ntotal
+        if((df['problem_cause'] == '').all()==False):
+            if ind_pcause.ntotal < 150:
+                n = ind_pcause.ntotal
+            else:
+                n = 150
+            D, I = ind_pcause.search(np.array([xq]), k=n)
+            if(set(np.round(D[0],1)) == {1.0}):
+                df_final2 = pd.DataFrame()
+                response_dict['problem_cause_results']={} 
+            elif(set(np.round(D[0],1)) == {0.0}):
+                df_final2 = pd.DataFrame()
+                response_dict['problem_cause_results']={} 
+            else:
+                df_c = df_clean.copy()
+                list_string = list(map(str, I[0]))
+                ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+                flat_ind=[item for sublist in ind_df for item in sublist]
+                df_c = df_c.iloc[flat_ind]
+                df_d = df_c.reindex(flat_ind)
+                df_final2 = df_d.reset_index(drop = True)
+                df_final2['distance'] = np.resize(D, df_final2.shape[0])
+                df_final2 = df_final2[df_final2['distance']<1.99]
+                df_final2 = df_final2.reset_index(drop = True)
+
+                if fleet != "NA":
+                    df_final2 = df_final2[df_final2.fleet == fleet]
+                if subsystem != "NA":
+                    df_final2 = df_final2[df_final2.subsystem == subsystem]	
+                if country != "NA":
+                    df_final2 = df_final2[df_final2.country == country]
+                if failure_class != "NA":
+                    df_final2 = df_final2[df_final2.failure_class == failure_class]	
+                if problem_code != "NA":
+                    df_final2 = df_final2[df_final2.problem_code == problem_code]
+                if functional_location != "NA":
+                    df_final2 = df_final2[df_final2.functional_location == functional_location]	
+                if notifications_number != "NA":
+                    df_final2 = df_final2[df_final2.notifications_number == notifications_number]
+                if pbs_code != "NA":
+                    df_final2 = df_final2[df_final2.pbs_code == pbs_code]
+                if symptom_code != "NA":
+                    df_final2 = df_final2[df_final2.symptom_code == symptom_code]
+                if language != "NA":
+                    df_final2 = df_final2[df_final2.language == language]
+                if date != "NA":
+                    df_final2['date'] = df_final2['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                    df_final2 = df_final2[(df_final2['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final2['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                    df_final2['date'] = df_final2['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+                if problem_cause != "NA":
+                    df_final2 = df_final2[df_final2.problem_cause == problem_cause]
+
+
+
+                rank = np.arange(1,len(df_final2)+1)
+                df_final2['ranking'] = rank
+                df_final2.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+                df_final2["frequency_obs"] = pd.to_numeric(df_final2["frequency_obs"], downcast="float")
+                df_final2["frequency_sol"] = pd.to_numeric(df_final2["frequency_sol"], downcast="float")
+                df_final2["frequency_obs"] = df_final2["frequency_obs"].apply(lambda x:np.round(x,2))
+                df_final2["frequency_sol"] = df_final2["frequency_sol"].apply(lambda x:np.round(x,2))
+
+                df_final2["resource"].fillna(value=0,inplace=True)
+                df_final2['resource'] = pd.to_numeric(df_final2['resource'], downcast='integer')
+                df_final2.fillna(value=0,inplace=True)
+                pcause_dict = df_final2.to_dict(orient="records")
+                response_dict['problem_cause_results'] = pcause_dict
+                if(df_final2.empty==True):
+                    response_dict['problem_cause_results']={}
+
+        else:
+            df_final2 = pd.DataFrame()
+            response_dict['problem_cause_results']={}
+                
+        # PROBLEM CODE SEARCH #
+        xq = encoder.encode(query) 
+        #k = ind_pcode.ntotal
+        if((df['problem_code'] == '').all()==False):
+            if ind_pcode.ntotal < 150:
+                n = ind_pcode.ntotal
+            else:
+                n = 150
+            D, I = ind_pcode.search(np.array([xq]), k=n)
+            if(set(np.round(D[0],1)) == {1.0}):
+                df_final3 = pd.DataFrame()
+                response_dict['problem_code_results']={} 
+            elif(set(np.round(D[0],1)) == {0.0}):
+                df_final3 = pd.DataFrame()
+                response_dict['problem_code_results']={} 
+            else:
+                df_c = df_clean.copy()
+                list_string = list(map(str, I[0]))
+                ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+                flat_ind=[item for sublist in ind_df for item in sublist]
+                df_c = df_c.iloc[flat_ind]
+                df_d = df_c.reindex(flat_ind)
+                df_final3 = df_d.reset_index(drop = True)
+                df_final3['distance'] = np.resize(D, df_final3.shape[0])
+                df_final3 = df_final3[df_final3['distance']<1.99]
+                df_final3 = df_final3.reset_index(drop = True)
+
+                if fleet != "NA":
+                    df_final3 = df_final3[df_final3.fleet == fleet]
+                if subsystem != "NA":
+                    df_final3 = df_final3[df_final3.subsystem == subsystem]	
+                if country != "NA":
+                    df_final3 = df_final3[df_final3.country == country]
+                if failure_class != "NA":
+                    df_final3 = df_final3[df_final3.failure_class == failure_class]	
+                if problem_code != "NA":
+                    df_final3 = df_final3[df_final3.problem_code == problem_code]
+                if functional_location != "NA":
+                    df_final3 = df_final3[df_final3.functional_location == functional_location]	
+                if notifications_number != "NA":
+                    df_final3 = df_final3[df_final3.notifications_number == notifications_number]
+                if pbs_code != "NA":
+                    df_final3 = df_final3[df_final3.pbs_code == pbs_code]
+                if symptom_code != "NA":
+                    df_final3 = df_final3[df_final3.symptom_code == symptom_code]
+                if language != "NA":
+                    df_final3 = df_final3[df_final3.language == language]
+                if date != "NA":
+                    df_final3['date'] = df_final3['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                    df_final3 = df_final3[(df_final3['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final3['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                    df_final3['date'] = df_final3['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+                if problem_cause != "NA":
+                    df_final3 = df_final3[df_final3.problem_cause == problem_cause]
+
+                rank = np.arange(1,len(df_final3)+1)
+                df_final3['ranking'] = rank
+                df_final3.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+                df_final3["frequency_obs"] = pd.to_numeric(df_final3["frequency_obs"], downcast="float")
+                df_final3["frequency_sol"] = pd.to_numeric(df_final3["frequency_sol"], downcast="float")
+                df_final3["frequency_obs"] = df_final3["frequency_obs"].apply(lambda x:np.round(x,2))
+                df_final3["frequency_sol"] = df_final3["frequency_sol"].apply(lambda x:np.round(x,2))
+
+                df_final3["resource"].fillna(value=0,inplace=True)
+                df_final3['resource'] = pd.to_numeric(df_final3['resource'], downcast='integer')
+                df_final3.fillna(value=0,inplace=True)
+                pcode_dict = df_final3.to_dict(orient="records")
+                response_dict['problem_code_results'] = pcode_dict
+                if(df_final3.empty==True):
+                    response_dict['problem_code_results']={} 
+                    
+        else:
+            df_final3 = pd.DataFrame()
+            response_dict['problem_code_results']={}
+            
+        # SOLUTION SEARCH #
+        xq = encoder.encode(query) 
+        #k = ind_sol.ntotal
+        if ind_sol.ntotal < 150:
+            n = ind_sol.ntotal
+        else:
+            n = 150
+        D, I = ind_sol.search(np.array([xq]), k=n)
+        if(set(np.round(D[0],1)) == {1.0}):
+            df_final4 = pd.DataFrame()
+            response_dict['solution_results']={} 
+        elif(set(np.round(D[0],1)) == {0.0}):
+            df_final4 = pd.DataFrame()
+            response_dict['solution_results']={} 
+        else:
+            df_c = df_clean.copy()
+            list_string = list(map(str, I[0]))
+            ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+            flat_ind=[item for sublist in ind_df for item in sublist]
+            df_c = df_c.iloc[flat_ind]
+            df_d = df_c.reindex(flat_ind)
+            df_final4 = df_d.reset_index(drop = True)
+            df_final4['distance'] = np.resize(D, df_final4.shape[0])
+            df_final4 = df_final4[df_final4['distance']<1.99]
+            df_final4 = df_final4.reset_index(drop = True)
+            
+            if fleet != "NA":
+                df_final4 = df_final4[df_final4.fleet == fleet]
+            if subsystem != "NA":
+                df_final4 = df_final4[df_final4.subsystem == subsystem]	
+            if country != "NA":
+                df_final4 = df_final4[df_final4.country == country]
+            if failure_class != "NA":
+                df_final4 = df_final4[df_final4.failure_class == failure_class]	
+            if problem_code != "NA":
+                df_final4 = df_final4[df_final4.problem_code == problem_code]
+            if functional_location != "NA":
+                df_final4 = df_final4[df_final4.functional_location == functional_location]	
+            if notifications_number != "NA":
+                df_final4 = df_final4[df_final4.notifications_number == notifications_number]
+            if pbs_code != "NA":
+                df_final4 = df_final4[df_final4.pbs_code == pbs_code]
+            if symptom_code != "NA":
+                df_final4 = df_final4[df_final4.symptom_code == symptom_code]
+            if language != "NA":
+                df_final4 = df_final4[df_final4.language == language]
+            if date != "NA":
+                df_final4['date'] = df_final4['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                df_final4 = df_final4[(df_final4['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final4['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                df_final4['date'] = df_final4['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+            if problem_cause != "NA":
+                df_final4 = df_final4[df_final4.problem_cause == problem_cause]
+
+
+
+            rank = np.arange(1,len(df_final4)+1)
+            df_final4['ranking'] = rank
+            df_final4.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+            df_final4["frequency_obs"] = pd.to_numeric(df_final4["frequency_obs"], downcast="float")
+            df_final4["frequency_sol"] = pd.to_numeric(df_final4["frequency_sol"], downcast="float")
+            df_final4["frequency_obs"] = df_final4["frequency_obs"].apply(lambda x:np.round(x,2))
+            df_final4["frequency_sol"] = df_final4["frequency_sol"].apply(lambda x:np.round(x,2))
+
+            df_final4["resource"].fillna(value=0,inplace=True)
+            df_final4['resource'] = pd.to_numeric(df_final4['resource'], downcast='integer')
+            df_final4.fillna(value=0,inplace=True)
+            sol_dict = df_final4.to_dict(orient="records")
+            response_dict['solution_results'] = sol_dict
+            if(df_final4.empty==True):
+                response_dict['solution_results']={}  
+        return response_dict
+    
+    ### NS16 ###
+    elif project == "NS16":
+        encoder = SentenceTransformer("all-MiniLM-L12-v2")
+        
+        # OBSERVATION SEARCH #
+        xq = encoder.encode(query) 
+        #k = 150
+        if ind_obs.ntotal < 150:
+             n = ind_obs.ntotal
+        else:
+             n = 150
+        D, I = ind_obs.search(np.array([xq]), k=n)
+        
+        if(set(np.round(D[0],1)) == {1.0}):
+            df_final1 = pd.DataFrame()
+            response_dict['observation_results']={} 
+        elif(set(np.round(D[0],1)) == {0.0}):
+            df_final1 = pd.DataFrame()
+            response_dict['observation_results']={} 
+        else:
+            df_c = df_clean.copy()
+            list_string = list(map(str, I[0]))
+            ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+            flat_ind=[item for sublist in ind_df for item in sublist]
+            df_c = df_c.iloc[flat_ind]
+            df_d = df_c.reindex(flat_ind)
+            df_final1 = df_d.reset_index(drop = True)
+            df_final1['distance'] = np.resize(D, df_final1.shape[0])
+            df_final1 = df_final1[df_final1['distance']<1.99]
+            df_final1 = df_final1.reset_index(drop = True)
+
+            if fleet != "NA":
+                df_final1 = df_final1[df_final1.fleet == fleet]
+            if subsystem != "NA":
+                df_final1 = df_final1[df_final1.subsystem == subsystem]	
+            if country != "NA":
+                df_final1 = df_final1[df_final1.country == country]
+            if failure_class != "NA":
+                df_final1 = df_final1[df_final1.failure_class == failure_class]	
+            if problem_code != "NA":
+                df_final1 = df_final1[df_final1.problem_code == problem_code]
+            if functional_location != "NA":
+                df_final1 = df_final1[df_final1.functional_location == functional_location]	
+            if notifications_number != "NA":
+                df_final1 = df_final1[df_final1.notifications_number == notifications_number]
+            if pbs_code != "NA":
+                df_final1 = df_final1[df_final1.pbs_code == pbs_code]
+            if symptom_code != "NA":
+                df_final1 = df_final1[df_final1.symptom_code == symptom_code]
+            if language != "NA":
+                df_final1 = df_final1[df_final1.language == language]
+            if date != "NA":
+                df_final1['date'] = df_final1['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                df_final1 = df_final1[(df_final1['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final1['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                df_final1['date'] = df_final1['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+            if problem_cause != "NA":
+                df_final1 = df_final1[df_final1.problem_cause == problem_cause]
+
+            rank = np.arange(1,len(df_final1)+1)
+            df_final1['ranking'] = rank
+            df_final1.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+            df_final1["frequency_obs"] = pd.to_numeric(df_final1["frequency_obs"], downcast="float")
+            df_final1["frequency_sol"] = pd.to_numeric(df_final1["frequency_sol"], downcast="float")
+            df_final1["frequency_obs"] = df_final1["frequency_obs"].apply(lambda x:np.round(x,2))
+            df_final1["frequency_sol"] = df_final1["frequency_sol"].apply(lambda x:np.round(x,2))
+
+            df_final1["resource"].fillna(value=0,inplace=True)
+            df_final1['resource'] = pd.to_numeric(df_final1['resource'], downcast='integer')
+            df_final1.fillna(value=0,inplace=True)
+            obs_dict = df_final1.to_dict(orient="records")
+            response_dict['observation_results'] = obs_dict
+            if(df_final1.empty==True):
+                response_dict['observation_results']={}
+                
+        # PROBLEM CAUSE SEARCH #
+        xq = encoder.encode(query) 
+        #k = 150
+        if((df['problem_cause'] == '').all()==False):
+            if ind_pcause.ntotal < 150:
+                 n = ind_pcause.ntotal
+            else:
+                 n = 150
+            D, I = ind_pcause.search(np.array([xq]), k=n)
+            if(set(np.round(D[0],1)) == {1.0}):
+                df_final2 = pd.DataFrame()
+                response_dict['problem_cause_results']={} 
+            elif(set(np.round(D[0],1)) == {0.0}):
+                df_final2 = pd.DataFrame()
+                response_dict['problem_cause_results']={} 
+            else:
+                df_c = df_clean.copy()
+                list_string = list(map(str, I[0]))
+                ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+                flat_ind=[item for sublist in ind_df for item in sublist]
+                df_c = df_c.iloc[flat_ind]
+                df_d = df_c.reindex(flat_ind)
+                df_final2 = df_d.reset_index(drop = True)
+                df_final2['distance'] = np.resize(D, df_final2.shape[0])
+                df_final2 = df_final2[df_final2['distance']<1.99]
+                df_final2 = df_final2.reset_index(drop = True)
+
+                if fleet != "NA":
+                    df_final2 = df_final2[df_final2.fleet == fleet]
+                if subsystem != "NA":
+                    df_final2 = df_final2[df_final2.subsystem == subsystem]	
+                if country != "NA":
+                    df_final2 = df_final2[df_final2.country == country]
+                if failure_class != "NA":
+                    df_final2 = df_final2[df_final2.failure_class == failure_class]	
+                if problem_code != "NA":
+                    df_final2 = df_final2[df_final2.problem_code == problem_code]
+                if functional_location != "NA":
+                    df_final2 = df_final2[df_final2.functional_location == functional_location]	
+                if notifications_number != "NA":
+                    df_final2 = df_final2[df_final2.notifications_number == notifications_number]
+                if pbs_code != "NA":
+                    df_final2 = df_final2[df_final2.pbs_code == pbs_code]
+                if symptom_code != "NA":
+                    df_final2 = df_final2[df_final2.symptom_code == symptom_code]
+                if language != "NA":
+                    df_final2 = df_final2[df_final2.language == language]
+                if date != "NA":
+                    df_final2['date'] = df_final2['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                    df_final2 = df_final2[(df_final2['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final2['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                    df_final2['date'] = df_final2['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+                if problem_cause != "NA":
+                    df_final2 = df_final2[df_final2.problem_cause == problem_cause]
+
+
+
+                rank = np.arange(1,len(df_final2)+1)
+                df_final2['ranking'] = rank
+                df_final2.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+                df_final2["frequency_obs"] = pd.to_numeric(df_final2["frequency_obs"], downcast="float")
+                df_final2["frequency_sol"] = pd.to_numeric(df_final2["frequency_sol"], downcast="float")
+                df_final2["frequency_obs"] = df_final2["frequency_obs"].apply(lambda x:np.round(x,2))
+                df_final2["frequency_sol"] = df_final2["frequency_sol"].apply(lambda x:np.round(x,2))
+
+                df_final2["resource"].fillna(value=0,inplace=True)
+                df_final2['resource'] = pd.to_numeric(df_final2['resource'], downcast='integer')
+                df_final2.fillna(value=0,inplace=True)
+                pcause_dict = df_final2.to_dict(orient="records")
+                response_dict['problem_cause_results'] = pcause_dict
+                if(df_final2.empty==True):
+                    response_dict['problem_cause_results']={}
+
+        else:
+            df_final2 = pd.DataFrame()
+            response_dict['problem_cause_results']={}
+                
+        # PROBLEM CODE SEARCH #
+        xq = encoder.encode(query) 
+        #k = 150
+        if((df['problem_code'] == '').all()==False):
+            if ind_pcode.ntotal < 150:
+                 n = ind_pcode.ntotal
+            else:
+                 n = 150
+            D, I = ind_pcode.search(np.array([xq]), k=n)
+            if(set(np.round(D[0],1)) == {1.0}):
+                df_final3 = pd.DataFrame()
+                response_dict['problem_code_results']={} 
+            elif(set(np.round(D[0],1)) == {0.0}):
+                df_final3 = pd.DataFrame()
+                response_dict['problem_code_results']={} 
+            else:
+                df_c = df_clean.copy()
+                list_string = list(map(str, I[0]))
+                ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+                flat_ind=[item for sublist in ind_df for item in sublist]
+                df_c = df_c.iloc[flat_ind]
+                df_d = df_c.reindex(flat_ind)
+                df_final3 = df_d.reset_index(drop = True)
+                df_final3['distance'] = np.resize(D, df_final3.shape[0])
+                df_final3 = df_final3[df_final3['distance']<1.99]
+                df_final3 = df_final3.reset_index(drop = True)
+
+                if fleet != "NA":
+                    df_final3 = df_final3[df_final3.fleet == fleet]
+                if subsystem != "NA":
+                    df_final3 = df_final3[df_final3.subsystem == subsystem]	
+                if country != "NA":
+                    df_final3 = df_final3[df_final3.country == country]
+                if failure_class != "NA":
+                    df_final3 = df_final3[df_final3.failure_class == failure_class]	
+                if problem_code != "NA":
+                    df_final3 = df_final3[df_final3.problem_code == problem_code]
+                if functional_location != "NA":
+                    df_final3 = df_final3[df_final3.functional_location == functional_location]	
+                if notifications_number != "NA":
+                    df_final3 = df_final3[df_final3.notifications_number == notifications_number]
+                if pbs_code != "NA":
+                    df_final3 = df_final3[df_final3.pbs_code == pbs_code]
+                if symptom_code != "NA":
+                    df_final3 = df_final3[df_final3.symptom_code == symptom_code]
+                if language != "NA":
+                    df_final3 = df_final3[df_final3.language == language]
+                if date != "NA":
+                    df_final3['date'] = df_final3['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                    df_final3 = df_final3[(df_final3['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final3['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                    df_final3['date'] = df_final3['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+                if problem_cause != "NA":
+                    df_final3 = df_final3[df_final3.problem_cause == problem_cause]
+
+                rank = np.arange(1,len(df_final3)+1)
+                df_final3['ranking'] = rank
+                df_final3.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+                df_final3["frequency_obs"] = pd.to_numeric(df_final3["frequency_obs"], downcast="float")
+                df_final3["frequency_sol"] = pd.to_numeric(df_final3["frequency_sol"], downcast="float")
+                df_final3["frequency_obs"] = df_final3["frequency_obs"].apply(lambda x:np.round(x,2))
+                df_final3["frequency_sol"] = df_final3["frequency_sol"].apply(lambda x:np.round(x,2))
+
+                df_final3["resource"].fillna(value=0,inplace=True)
+                df_final3['resource'] = pd.to_numeric(df_final3['resource'], downcast='integer')
+                df_final3.fillna(value=0,inplace=True)
+                pcode_dict = df_final3.to_dict(orient="records")
+                response_dict['problem_code_results'] = pcode_dict
+                if(df_final3.empty==True):
+                    response_dict['problem_code_results']={} 
+                    
+        else:
+            df_final3 = pd.DataFrame()
+            response_dict['problem_code_results']={}
+            
+        # SOLUTION SEARCH #
+        xq = encoder.encode(query) 
+        #k = 150
+        if ind_sol.ntotal < 150:
+            n = ind_sol.ntotal
+        else:
+            n = 150
+        D, I = ind_sol.search(np.array([xq]), k=n)
+        if(set(np.round(D[0],1)) == {1.0}):
+            df_final4 = pd.DataFrame()
+            response_dict['solution_results']={} 
+        elif(set(np.round(D[0],1)) == {0.0}):
+            df_final4 = pd.DataFrame()
+            response_dict['solution_results']={} 
+        else:
+            df_c = df_clean.copy()
+            list_string = list(map(str, I[0]))
+            ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+            flat_ind=[item for sublist in ind_df for item in sublist]
+            df_c = df_c.iloc[flat_ind]
+            df_d = df_c.reindex(flat_ind)
+            df_final4 = df_d.reset_index(drop = True)
+            df_final4['distance'] = np.resize(D, df_final4.shape[0])
+            df_final4 = df_final4[df_final4['distance']<1.99]
+            df_final4 = df_final4.reset_index(drop = True)
+            
+            if fleet != "NA":
+                df_final4 = df_final4[df_final4.fleet == fleet]
+            if subsystem != "NA":
+                df_final4 = df_final4[df_final4.subsystem == subsystem]	
+            if country != "NA":
+                df_final4 = df_final4[df_final4.country == country]
+            if failure_class != "NA":
+                df_final4 = df_final4[df_final4.failure_class == failure_class]	
+            if problem_code != "NA":
+                df_final4 = df_final4[df_final4.problem_code == problem_code]
+            if functional_location != "NA":
+                df_final4 = df_final4[df_final4.functional_location == functional_location]	
+            if notifications_number != "NA":
+                df_final4 = df_final4[df_final4.notifications_number == notifications_number]
+            if pbs_code != "NA":
+                df_final4 = df_final4[df_final4.pbs_code == pbs_code]
+            if symptom_code != "NA":
+                df_final4 = df_final4[df_final4.symptom_code == symptom_code]
+            if language != "NA":
+                df_final4 = df_final4[df_final4.language == language]
+            if date != "NA":
+                df_final4['date'] = df_final4['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                df_final4 = df_final4[(df_final4['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final4['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                df_final4['date'] = df_final4['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+            if problem_cause != "NA":
+                df_final4 = df_final4[df_final4.problem_cause == problem_cause]
+
+
+
+            rank = np.arange(1,len(df_final4)+1)
+            df_final4['ranking'] = rank
+            df_final4.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+            df_final4["frequency_obs"] = pd.to_numeric(df_final4["frequency_obs"], downcast="float")
+            df_final4["frequency_sol"] = pd.to_numeric(df_final4["frequency_sol"], downcast="float")
+            df_final4["frequency_obs"] = df_final4["frequency_obs"].apply(lambda x:np.round(x,2))
+            df_final4["frequency_sol"] = df_final4["frequency_sol"].apply(lambda x:np.round(x,2))
+
+            df_final4["resource"].fillna(value=0,inplace=True)
+            df_final4['resource'] = pd.to_numeric(df_final4['resource'], downcast='integer')
+            df_final4.fillna(value=0,inplace=True)
+            sol_dict = df_final4.to_dict(orient="records")
+            response_dict['solution_results'] = sol_dict
+            if(df_final4.empty==True):
+                response_dict['solution_results']={}
+            
+        return response_dict
+    
+    ### TIB ###
+    elif project == "TiB":
+        encoder = SentenceTransformer("all-MiniLM-L12-v2")
+        
+        # OBSERVATION SEARCH #
+        xq = encoder.encode(query) 
+        #k = 150
+        if ind_obs.ntotal < 150:
+            n = ind_obs.ntotal
+        else:
+            n = 150
+        D, I = ind_obs.search(np.array([xq]), k=n)
+        
+        if(set(np.round(D[0],1)) == {1.0}):
+            df_final1 = pd.DataFrame()
+            response_dict['observation_results']={} 
+        elif(set(np.round(D[0],1)) == {0.0}):
+            df_final1 = pd.DataFrame()
+            response_dict['observation_results']={} 
+        else:
+            df_c = df_clean.copy()
+            list_string = list(map(str, I[0]))
+            ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+            flat_ind=[item for sublist in ind_df for item in sublist]
+            df_c = df_c.iloc[flat_ind]
+            df_d = df_c.reindex(flat_ind)
+            df_final1 = df_d.reset_index(drop = True)
+            df_final1['distance'] = np.resize(D, df_final1.shape[0])
+            df_final1 = df_final1[df_final1['distance']<1.99]
+            df_final1 = df_final1.reset_index(drop = True)
+
+            if fleet != "NA":
+                df_final1 = df_final1[df_final1.fleet == fleet]
+            if subsystem != "NA":
+                df_final1 = df_final1[df_final1.subsystem == subsystem]	
+            if country != "NA":
+                df_final1 = df_final1[df_final1.country == country]
+            if failure_class != "NA":
+                df_final1 = df_final1[df_final1.failure_class == failure_class]	
+            if problem_code != "NA":
+                df_final1 = df_final1[df_final1.problem_code == problem_code]
+            if functional_location != "NA":
+                df_final1 = df_final1[df_final1.functional_location == functional_location]	
+            if notifications_number != "NA":
+                df_final1 = df_final1[df_final1.notifications_number == notifications_number]
+            if pbs_code != "NA":
+                df_final1 = df_final1[df_final1.pbs_code == pbs_code]
+            if symptom_code != "NA":
+                df_final1 = df_final1[df_final1.symptom_code == symptom_code]
+            if language != "NA":
+                df_final1 = df_final1[df_final1.language == language]
+            if date != "NA":
+                df_final1['date'] = df_final1['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                df_final1 = df_final1[(df_final1['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final1['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                df_final1['date'] = df_final1['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+            if problem_cause != "NA":
+                df_final1 = df_final1[df_final1.problem_cause == problem_cause]
+
+            rank = np.arange(1,len(df_final1)+1)
+            df_final1['ranking'] = rank
+            df_final1.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+            df_final1["frequency_obs"] = pd.to_numeric(df_final1["frequency_obs"], downcast="float")
+            df_final1["frequency_sol"] = pd.to_numeric(df_final1["frequency_sol"], downcast="float")
+            df_final1["frequency_obs"] = df_final1["frequency_obs"].apply(lambda x:np.round(x,2))
+            df_final1["frequency_sol"] = df_final1["frequency_sol"].apply(lambda x:np.round(x,2))
+
+            df_final1["resource"].fillna(value=0,inplace=True)
+            df_final1['resource'] = pd.to_numeric(df_final1['resource'], downcast='integer')
+            df_final1.fillna(value=0,inplace=True)
+            obs_dict = df_final1.to_dict(orient="records")
+            response_dict['observation_results'] = obs_dict
+            if(df_final1.empty==True):
+                response_dict['observation_results']={}
+                
+        # PROBLEM CAUSE SEARCH #
+        xq = encoder.encode(query) 
+        #k = 150
+        if((df['problem_cause'] == '').all()==False):
+            if ind_pcause.ntotal < 150:
+                n = ind_pcause.ntotal
+            else:
+                n = 150
+            D, I = ind_pcause.search(np.array([xq]), k=n)
+            if(set(np.round(D[0],1)) == {1.0}):
+                df_final2 = pd.DataFrame()
+                response_dict['problem_cause_results']={} 
+            elif(set(np.round(D[0],1)) == {0.0}):
+                df_final2 = pd.DataFrame()
+                response_dict['problem_cause_results']={} 
+            else:
+                df_c = df_clean.copy()
+                list_string = list(map(str, I[0]))
+                ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+                flat_ind=[item for sublist in ind_df for item in sublist]
+                df_c = df_c.iloc[flat_ind]
+                df_d = df_c.reindex(flat_ind)
+                df_final2 = df_d.reset_index(drop = True)
+                df_final2['distance'] = np.resize(D, df_final2.shape[0])
+                df_final2 = df_final2[df_final2['distance']<1.99]
+                df_final2 = df_final2.reset_index(drop = True)
+
+                if fleet != "NA":
+                    df_final2 = df_final2[df_final2.fleet == fleet]
+                if subsystem != "NA":
+                    df_final2 = df_final2[df_final2.subsystem == subsystem]	
+                if country != "NA":
+                    df_final2 = df_final2[df_final2.country == country]
+                if failure_class != "NA":
+                    df_final2 = df_final2[df_final2.failure_class == failure_class]	
+                if problem_code != "NA":
+                    df_final2 = df_final2[df_final2.problem_code == problem_code]
+                if functional_location != "NA":
+                    df_final2 = df_final2[df_final2.functional_location == functional_location]	
+                if notifications_number != "NA":
+                    df_final2 = df_final2[df_final2.notifications_number == notifications_number]
+                if pbs_code != "NA":
+                    df_final2 = df_final2[df_final2.pbs_code == pbs_code]
+                if symptom_code != "NA":
+                    df_final2 = df_final2[df_final2.symptom_code == symptom_code]
+                if language != "NA":
+                    df_final2 = df_final2[df_final2.language == language]
+                if date != "NA":
+                    df_final2['date'] = df_final2['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                    df_final2 = df_final2[(df_final2['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final2['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                    df_final2['date'] = df_final2['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+                if problem_cause != "NA":
+                    df_final2 = df_final2[df_final2.problem_cause == problem_cause]
+
+
+
+                rank = np.arange(1,len(df_final2)+1)
+                df_final2['ranking'] = rank
+                df_final2.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+                df_final2["frequency_obs"] = pd.to_numeric(df_final2["frequency_obs"], downcast="float")
+                df_final2["frequency_sol"] = pd.to_numeric(df_final2["frequency_sol"], downcast="float")
+                df_final2["frequency_obs"] = df_final2["frequency_obs"].apply(lambda x:np.round(x,2))
+                df_final2["frequency_sol"] = df_final2["frequency_sol"].apply(lambda x:np.round(x,2))
+
+                df_final2["resource"].fillna(value=0,inplace=True)
+                df_final2['resource'] = pd.to_numeric(df_final2['resource'], downcast='integer')
+                df_final2.fillna(value=0,inplace=True)
+                pcause_dict = df_final2.to_dict(orient="records")
+                response_dict['problem_cause_results'] = pcause_dict
+                if(df_final2.empty==True):
+                    response_dict['problem_cause_results']={}
+
+        else:
+            df_final2 = pd.DataFrame()
+            response_dict['problem_cause_results']={}
+                
+        # PROBLEM CODE SEARCH #
+        xq = encoder.encode(query) 
+        #k = 150
+        if((df['problem_code'] == '').all()==False):
+            if ind_pcode.ntotal < 150:
+                n = ind_pcode.ntotal
+            else:
+                n = 150
+            D, I = ind_pcode.search(np.array([xq]), k=n)
+            if(set(np.round(D[0],1)) == {1.0}):
+                df_final3 = pd.DataFrame()
+                response_dict['problem_code_results']={} 
+            elif(set(np.round(D[0],1)) == {0.0}):
+                df_final3 = pd.DataFrame()
+                response_dict['problem_code_results']={} 
+            else:
+                df_c = df_clean.copy()
+                list_string = list(map(str, I[0]))
+                ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+                flat_ind=[item for sublist in ind_df for item in sublist]
+                df_c = df_c.iloc[flat_ind]
+                df_d = df_c.reindex(flat_ind)
+                df_final3 = df_d.reset_index(drop = True)
+                df_final3['distance'] = np.resize(D, df_final3.shape[0])
+                df_final3 = df_final3[df_final3['distance']<1.99]
+                df_final3 = df_final3.reset_index(drop = True)
+
+                if fleet != "NA":
+                    df_final3 = df_final3[df_final3.fleet == fleet]
+                if subsystem != "NA":
+                    df_final3 = df_final3[df_final3.subsystem == subsystem]	
+                if country != "NA":
+                    df_final3 = df_final3[df_final3.country == country]
+                if failure_class != "NA":
+                    df_final3 = df_final3[df_final3.failure_class == failure_class]	
+                if problem_code != "NA":
+                    df_final3 = df_final3[df_final3.problem_code == problem_code]
+                if functional_location != "NA":
+                    df_final3 = df_final3[df_final3.functional_location == functional_location]	
+                if notifications_number != "NA":
+                    df_final3 = df_final3[df_final3.notifications_number == notifications_number]
+                if pbs_code != "NA":
+                    df_final3 = df_final3[df_final3.pbs_code == pbs_code]
+                if symptom_code != "NA":
+                    df_final3 = df_final3[df_final3.symptom_code == symptom_code]
+                if language != "NA":
+                    df_final3 = df_final3[df_final3.language == language]
+                if date != "NA":
+                    df_final3['date'] = df_final3['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                    df_final3 = df_final3[(df_final3['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final3['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                    df_final3['date'] = df_final3['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+                if problem_cause != "NA":
+                    df_final3 = df_final3[df_final3.problem_cause == problem_cause]
+
+                rank = np.arange(1,len(df_final3)+1)
+                df_final3['ranking'] = rank
+                df_final3.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+                df_final3["frequency_obs"] = pd.to_numeric(df_final3["frequency_obs"], downcast="float")
+                df_final3["frequency_sol"] = pd.to_numeric(df_final3["frequency_sol"], downcast="float")
+                df_final3["frequency_obs"] = df_final3["frequency_obs"].apply(lambda x:np.round(x,2))
+                df_final3["frequency_sol"] = df_final3["frequency_sol"].apply(lambda x:np.round(x,2))
+
+                df_final3["resource"].fillna(value=0,inplace=True)
+                df_final3['resource'] = pd.to_numeric(df_final3['resource'], downcast='integer')
+                df_final3.fillna(value=0,inplace=True)
+                pcode_dict = df_final3.to_dict(orient="records")
+                response_dict['problem_code_results'] = pcode_dict
+                if(df_final3.empty==True):
+                    response_dict['problem_code_results']={} 
+                    
+        else:
+            df_final3 = pd.DataFrame()
+            response_dict['problem_code_results']={}
+            
+        # SOLUTION SEARCH #
+        xq = encoder.encode(query) 
+        #k = 150
+        if ind_sol.ntotal < 150:
+            n = ind_sol.ntotal
+        else:
+            n = 150
+        D, I = ind_sol.search(np.array([xq]), k=n)
+        if(set(np.round(D[0],1)) == {1.0}):
+            df_final4 = pd.DataFrame()
+            response_dict['solution_results']={} 
+        elif(set(np.round(D[0],1)) == {0.0}):
+            df_final4 = pd.DataFrame()
+            response_dict['solution_results']={} 
+        else:
+            df_c = df_clean.copy()
+            list_string = list(map(str, I[0]))
+            ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+            flat_ind=[item for sublist in ind_df for item in sublist]
+            df_c = df_c.iloc[flat_ind]
+            df_d = df_c.reindex(flat_ind)
+            df_final4 = df_d.reset_index(drop = True)
+            df_final4['distance'] = np.resize(D, df_final4.shape[0])
+            df_final4 = df_final4[df_final4['distance']<1.99]
+            df_final4 = df_final4.reset_index(drop = True)
+            
+            if fleet != "NA":
+                df_final4 = df_final4[df_final4.fleet == fleet]
+            if subsystem != "NA":
+                df_final4 = df_final4[df_final4.subsystem == subsystem]	
+            if country != "NA":
+                df_final4 = df_final4[df_final4.country == country]
+            if failure_class != "NA":
+                df_final4 = df_final4[df_final4.failure_class == failure_class]	
+            if problem_code != "NA":
+                df_final4 = df_final4[df_final4.problem_code == problem_code]
+            if functional_location != "NA":
+                df_final4 = df_final4[df_final4.functional_location == functional_location]	
+            if notifications_number != "NA":
+                df_final4 = df_final4[df_final4.notifications_number == notifications_number]
+            if pbs_code != "NA":
+                df_final4 = df_final4[df_final4.pbs_code == pbs_code]
+            if symptom_code != "NA":
+                df_final4 = df_final4[df_final4.symptom_code == symptom_code]
+            if language != "NA":
+                df_final4 = df_final4[df_final4.language == language]
+            if date != "NA":
+                df_final4['date'] = df_final4['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                df_final4 = df_final4[(df_final4['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final4['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                df_final4['date'] = df_final4['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+            if problem_cause != "NA":
+                df_final4 = df_final4[df_final4.problem_cause == problem_cause]
+
+
+
+            rank = np.arange(1,len(df_final4)+1)
+            df_final4['ranking'] = rank
+            df_final4.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+            df_final4["frequency_obs"] = pd.to_numeric(df_final4["frequency_obs"], downcast="float")
+            df_final4["frequency_sol"] = pd.to_numeric(df_final4["frequency_sol"], downcast="float")
+            df_final4["frequency_obs"] = df_final4["frequency_obs"].apply(lambda x:np.round(x,2))
+            df_final4["frequency_sol"] = df_final4["frequency_sol"].apply(lambda x:np.round(x,2))
+
+            df_final4["resource"].fillna(value=0,inplace=True)
+            df_final4['resource'] = pd.to_numeric(df_final4['resource'], downcast='integer')
+            df_final4.fillna(value=0,inplace=True)
+            sol_dict = df_final4.to_dict(orient="records")
+            response_dict['solution_results'] = sol_dict
+            if(df_final4.empty==True):
+                response_dict['solution_results']={}
+            
+        return response_dict
+    #===================================================================================
+    
+    ### Remaining Projects ###
+    elif project == "Panama" or project == "Merval" or project == "REG2N" or project == "LMRC" or \
+    project == "KZ8A" or project == "U400" or project == "KZ4AT" or project == "Dubai" or \
+    project == "222 - emr" or project == "Spain" or project == "Italy" or project == "Ind_e_loco" or \
+    project == "VLINE RRSMC" or project == "iTAC Nantes" or project == "REM":
+    
+    
+        encoder = SentenceTransformer("all-MiniLM-L12-v2")
+        
+        # OBSERVATION SEARCH #
+        xq = encoder.encode(query) 
+        #k = 150
+        
+        if ind_obs.ntotal < 150:
+             n = ind_obs.ntotal
+        else:
+             n = 150
+        D, I = ind_obs.search(np.array([xq]), k=n)
+        
+        if(set(np.round(D[0],1)) == {1.0}):
+            df_final1 = pd.DataFrame()
+            response_dict['observation_results']={} 
+        elif(set(np.round(D[0],1)) == {0.0}):
+            df_final1 = pd.DataFrame()
+            response_dict['observation_results']={} 
+        else:
+            df_c = df_clean.copy()
+            list_string = list(map(str, I[0]))
+            ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+            flat_ind=[item for sublist in ind_df for item in sublist]
+            df_c = df_c.iloc[flat_ind]
+            df_d = df_c.reindex(flat_ind)
+            df_final1 = df_d.reset_index(drop = True)
+            df_final1['distance'] = np.resize(D, df_final1.shape[0])
+            df_final1 = df_final1[df_final1['distance']<1.99]
+            df_final1 = df_final1.reset_index(drop = True)
+
+            if fleet != "NA":
+                df_final1 = df_final1[df_final1.fleet == fleet]
+            if subsystem != "NA":
+                df_final1 = df_final1[df_final1.subsystem == subsystem]	
+            if country != "NA":
+                df_final1 = df_final1[df_final1.country == country]
+            if failure_class != "NA":
+                df_final1 = df_final1[df_final1.failure_class == failure_class]	
+            if problem_code != "NA":
+                df_final1 = df_final1[df_final1.problem_code == problem_code]
+            if functional_location != "NA":
+                df_final1 = df_final1[df_final1.functional_location == functional_location]	
+            if notifications_number != "NA":
+                df_final1 = df_final1[df_final1.notifications_number == notifications_number]
+            if pbs_code != "NA":
+                df_final1 = df_final1[df_final1.pbs_code == pbs_code]
+            if symptom_code != "NA":
+                df_final1 = df_final1[df_final1.symptom_code == symptom_code]
+            if language != "NA":
+                df_final1 = df_final1[df_final1.language == language]
+            if date != "NA":
+                df_final1['date'] = df_final1['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                df_final1 = df_final1[(df_final1['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final1['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                df_final1['date'] = df_final1['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+            if problem_cause != "NA":
+                df_final1 = df_final1[df_final1.problem_cause == problem_cause]
+
+            rank = np.arange(1,len(df_final1)+1)
+            df_final1['ranking'] = rank
+            df_final1.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+            df_final1["frequency_obs"] = pd.to_numeric(df_final1["frequency_obs"], downcast="float")
+            df_final1["frequency_sol"] = pd.to_numeric(df_final1["frequency_sol"], downcast="float")
+            df_final1["frequency_obs"] = df_final1["frequency_obs"].apply(lambda x:np.round(x,2))
+            df_final1["frequency_sol"] = df_final1["frequency_sol"].apply(lambda x:np.round(x,2))
+
+            df_final1["resource"].fillna(value=0,inplace=True)
+            df_final1['resource'] = pd.to_numeric(df_final1['resource'], downcast='integer')
+            df_final1.fillna(value=0,inplace=True)
+            obs_dict = df_final1.to_dict(orient="records")
+            response_dict['observation_results'] = obs_dict
+            if(df_final1.empty==True):
+                response_dict['observation_results']={}
+                
+        # PROBLEM CAUSE SEARCH #
+        xq = encoder.encode(query) 
+        #k = 150
+        if((df['problem_cause'] == '').all()==False):
+            if ind_pcause.ntotal < 150:
+                 n = ind_pcause.ntotal
+            else:
+                 n = 150
+            
+            D, I = ind_pcause.search(np.array([xq]), k=n)
+            if(set(np.round(D[0],1)) == {1.0}):
+                df_final2 = pd.DataFrame()
+                response_dict['problem_cause_results']={} 
+            elif(set(np.round(D[0],1)) == {0.0}):
+                df_final2 = pd.DataFrame()
+                response_dict['problem_cause_results']={} 
+            else:
+                df_c = df_clean.copy()
+                list_string = list(map(str, I[0]))
+                ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+                flat_ind=[item for sublist in ind_df for item in sublist]
+                df_c = df_c.iloc[flat_ind]
+                df_d = df_c.reindex(flat_ind)
+                df_final2 = df_d.reset_index(drop = True)
+                df_final2['distance'] = np.resize(D, df_final2.shape[0])
+                df_final2 = df_final2[df_final2['distance']<1.99]
+                df_final2 = df_final2.reset_index(drop = True)
+
+                if fleet != "NA":
+                    df_final2 = df_final2[df_final2.fleet == fleet]
+                if subsystem != "NA":
+                    df_final2 = df_final2[df_final2.subsystem == subsystem]	
+                if country != "NA":
+                    df_final2 = df_final2[df_final2.country == country]
+                if failure_class != "NA":
+                    df_final2 = df_final2[df_final2.failure_class == failure_class]	
+                if problem_code != "NA":
+                    df_final2 = df_final2[df_final2.problem_code == problem_code]
+                if functional_location != "NA":
+                    df_final2 = df_final2[df_final2.functional_location == functional_location]	
+                if notifications_number != "NA":
+                    df_final2 = df_final2[df_final2.notifications_number == notifications_number]
+                if pbs_code != "NA":
+                    df_final2 = df_final2[df_final2.pbs_code == pbs_code]
+                if symptom_code != "NA":
+                    df_final2 = df_final2[df_final2.symptom_code == symptom_code]
+                if language != "NA":
+                    df_final2 = df_final2[df_final2.language == language]
+                if date != "NA":
+                    df_final2['date'] = df_final2['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                    df_final2 = df_final2[(df_final2['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final2['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                    df_final2['date'] = df_final2['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+                if problem_cause != "NA":
+                    df_final2 = df_final2[df_final2.problem_cause == problem_cause]
+
+
+
+                rank = np.arange(1,len(df_final2)+1)
+                df_final2['ranking'] = rank
+                df_final2.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+                df_final2["frequency_obs"] = pd.to_numeric(df_final2["frequency_obs"], downcast="float")
+                df_final2["frequency_sol"] = pd.to_numeric(df_final2["frequency_sol"], downcast="float")
+                df_final2["frequency_obs"] = df_final2["frequency_obs"].apply(lambda x:np.round(x,2))
+                df_final2["frequency_sol"] = df_final2["frequency_sol"].apply(lambda x:np.round(x,2))
+
+                df_final2["resource"].fillna(value=0,inplace=True)
+                df_final2['resource'] = pd.to_numeric(df_final2['resource'], downcast='integer')
+                df_final2.fillna(value=0,inplace=True)
+                pcause_dict = df_final2.to_dict(orient="records")
+                response_dict['problem_cause_results'] = pcause_dict
+                if(df_final2.empty==True):
+                    response_dict['problem_cause_results']={}
+
+        else:
+            df_final2 = pd.DataFrame()
+            response_dict['problem_cause_results']={}
+                
+        # PROBLEM CODE SEARCH #
+        xq = encoder.encode(query) 
+        #k = 150
+        if((df['problem_code'] == '').all()==False):
+            if ind_pcode.ntotal < 150:
+                 n = ind_pcode.ntotal
+            else:
+                 n = 150
+            
+            D, I = ind_pcode.search(np.array([xq]), k=n)
+            if(set(np.round(D[0],1)) == {1.0}):
+                df_final3 = pd.DataFrame()
+                response_dict['problem_code_results']={} 
+            elif(set(np.round(D[0],1)) == {0.0}):
+                df_final3 = pd.DataFrame()
+                response_dict['problem_code_results']={} 
+            else:
+                df_c = df_clean.copy()
+                list_string = list(map(str, I[0]))
+                ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+                flat_ind=[item for sublist in ind_df for item in sublist]
+                df_c = df_c.iloc[flat_ind]
+                df_d = df_c.reindex(flat_ind)
+                df_final3 = df_d.reset_index(drop = True)
+                df_final3['distance'] = np.resize(D, df_final3.shape[0])
+                df_final3 = df_final3[df_final3['distance']<1.99]
+                df_final3 = df_final3.reset_index(drop = True)
+
+                if fleet != "NA":
+                    df_final3 = df_final3[df_final3.fleet == fleet]
+                if subsystem != "NA":
+                    df_final3 = df_final3[df_final3.subsystem == subsystem]	
+                if country != "NA":
+                    df_final3 = df_final3[df_final3.country == country]
+                if failure_class != "NA":
+                    df_final3 = df_final3[df_final3.failure_class == failure_class]	
+                if problem_code != "NA":
+                    df_final3 = df_final3[df_final3.problem_code == problem_code]
+                if functional_location != "NA":
+                    df_final3 = df_final3[df_final3.functional_location == functional_location]	
+                if notifications_number != "NA":
+                    df_final3 = df_final3[df_final3.notifications_number == notifications_number]
+                if pbs_code != "NA":
+                    df_final3 = df_final3[df_final3.pbs_code == pbs_code]
+                if symptom_code != "NA":
+                    df_final3 = df_final3[df_final3.symptom_code == symptom_code]
+                if language != "NA":
+                    df_final3 = df_final3[df_final3.language == language]
+                if date != "NA":
+                    df_final3['date'] = df_final3['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                    df_final3 = df_final3[(df_final3['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final3['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                    df_final3['date'] = df_final3['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+                if problem_cause != "NA":
+                    df_final3 = df_final3[df_final3.problem_cause == problem_cause]
+
+                rank = np.arange(1,len(df_final3)+1)
+                df_final3['ranking'] = rank
+                df_final3.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+                df_final3["frequency_obs"] = pd.to_numeric(df_final3["frequency_obs"], downcast="float")
+                df_final3["frequency_sol"] = pd.to_numeric(df_final3["frequency_sol"], downcast="float")
+                df_final3["frequency_obs"] = df_final3["frequency_obs"].apply(lambda x:np.round(x,2))
+                df_final3["frequency_sol"] = df_final3["frequency_sol"].apply(lambda x:np.round(x,2))
+
+                df_final3["resource"].fillna(value=0,inplace=True)
+                df_final3['resource'] = pd.to_numeric(df_final3['resource'], downcast='integer')
+                df_final3.fillna(value=0,inplace=True)
+                pcode_dict = df_final3.to_dict(orient="records")
+                response_dict['problem_code_results'] = pcode_dict
+                if(df_final3.empty==True):
+                    response_dict['problem_code_results']={} 
+                    
+        else:
+            df_final3 = pd.DataFrame()
+            response_dict['problem_code_results']={}
+            
+        # SOLUTION SEARCH #
+        xq = encoder.encode(query) 
+        #k = 150
+        if ind_sol.ntotal < 150:
+             n = ind_sol.ntotal
+        else:
+             n = 150
+        
+        D, I = ind_sol.search(np.array([xq]), k=n)
+        if(set(np.round(D[0],1)) == {1.0}):
+            df_final4 = pd.DataFrame()
+            response_dict['solution_results']={} 
+        elif(set(np.round(D[0],1)) == {0.0}):
+            df_final4 = pd.DataFrame()
+            response_dict['solution_results']={} 
+        else:
+            df_c = df_clean.copy()
+            list_string = list(map(str, I[0]))
+            ind_df=[df_c.index[df_c['obs_id']==i].tolist() for i in list_string]
+            flat_ind=[item for sublist in ind_df for item in sublist]
+            df_c = df_c.iloc[flat_ind]
+            df_d = df_c.reindex(flat_ind)
+            df_final4 = df_d.reset_index(drop = True)
+            df_final4['distance'] = np.resize(D, df_final4.shape[0])
+            df_final4 = df_final4[df_final4['distance']<1.99]
+            df_final4 = df_final4.reset_index(drop = True)
+            
+            if fleet != "NA":
+                df_final4 = df_final4[df_final4.fleet == fleet]
+            if subsystem != "NA":
+                df_final4 = df_final4[df_final4.subsystem == subsystem]	
+            if country != "NA":
+                df_final4 = df_final4[df_final4.country == country]
+            if failure_class != "NA":
+                df_final4 = df_final4[df_final4.failure_class == failure_class]	
+            if problem_code != "NA":
+                df_final4 = df_final4[df_final4.problem_code == problem_code]
+            if functional_location != "NA":
+                df_final4 = df_final4[df_final4.functional_location == functional_location]	
+            if notifications_number != "NA":
+                df_final4 = df_final4[df_final4.notifications_number == notifications_number]
+            if pbs_code != "NA":
+                df_final4 = df_final4[df_final4.pbs_code == pbs_code]
+            if symptom_code != "NA":
+                df_final4 = df_final4[df_final4.symptom_code == symptom_code]
+            if language != "NA":
+                df_final4 = df_final4[df_final4.language == language]
+            if date != "NA":
+                df_final4['date'] = df_final4['date'].apply(lambda x:pd.to_datetime(x,dayfirst=True))
+                df_final4 = df_final4[(df_final4['date']>=pd.to_datetime(dater[0],dayfirst=True)) & (df_final4['date']<=pd.to_datetime(dater[1],dayfirst=True))]
+                df_final4['date'] = df_final4['date'].apply(lambda x:datetime.datetime.strftime(x, '%d/%m/%Y'))
+            if problem_cause != "NA":
+                df_final4 = df_final4[df_final4.problem_cause == problem_cause]
+
+
+
+            rank = np.arange(1,len(df_final4)+1)
+            df_final4['ranking'] = rank
+            df_final4.drop(labels=["obs_merged","problem_cause_merged","problem_code_merged","solution_merged","distance"],axis=1,inplace=True)    
+            df_final4["frequency_obs"] = pd.to_numeric(df_final4["frequency_obs"], downcast="float")
+            df_final4["frequency_sol"] = pd.to_numeric(df_final4["frequency_sol"], downcast="float")
+            df_final4["frequency_obs"] = df_final4["frequency_obs"].apply(lambda x:np.round(x,2))
+            df_final4["frequency_sol"] = df_final4["frequency_sol"].apply(lambda x:np.round(x,2))
+
+            df_final4["resource"].fillna(value=0,inplace=True)
+            df_final4['resource'] = pd.to_numeric(df_final4['resource'], downcast='integer')
+            df_final4.fillna(value=0,inplace=True)
+            sol_dict = df_final4.to_dict(orient="records")
+            response_dict['solution_results'] = sol_dict
+            if(df_final4.empty==True):
+                response_dict['solution_results']={}
+            
+        return response_dict
+    #===================================================================================
+   
