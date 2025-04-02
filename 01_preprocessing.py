@@ -23,11 +23,17 @@ logging.info("Datasets Loaded! ✅")
 
 # Filter incomplete and invalid records
 logging.info("Filtering incomplete and invalid records...")
-invalid_patterns = [r"####", r"#NAME?", r"-", r"^\d+$", r"^\s*$", r"^[!@#$%^&*(),.?\":{}|<>]+$", r"N/A - N/A"]
+invalid_patterns = [r"^$", r"^\s+$", r"####", r"#NAME?", r"-", r"^\d+$", r"^\s*$", r"^[!@#$%^&*(),.?\":{}|<>]+$", r"N/A - N/A"]
 
 def filter_invalid_records(df, invalid_patterns):
-    if "observation" in df.columns:
-        df = df[~df["observation"].astype(str).str.match("|".join(invalid_patterns), na=False)]
+
+    combined_pattern = "|".join(invalid_patterns)
+
+    if "observation" in df.columns and "solution" in df.columns:
+        df = df[
+            ~df["observation"].astype(str).str.match(combined_pattern, na=False) &
+            ~df["solution"].astype(str).str.match(combined_pattern, na=False)
+        ]
     df = df.dropna(subset=["observation", "solution"], how="any")
     return df
 
@@ -69,22 +75,28 @@ def standardize_values(df, name):
 dataframes = {name: standardize_values(df, name) for name, df in dataframes.items()}
 logging.info("Standardization complete! ✅")
 
-# Clean text columns
 def clean_text(text):
     if pd.isna(text):
         return ""
+
+    # Unicode normalization
     text = unicodedata.normalize('NFKC', str(text)).strip()
-    text = re.sub(r'(?<=[a-zA-Z])\.(?=[a-zA-Z])', '. ', text)
+
+    # Fix spacing around punctuation (language-agnostic approach)
+    text = re.sub(r'(?<=\p{L})\.(?=\p{L})', '. ', text, flags=re.UNICODE)
     text = re.sub(r'(?<=\d)\s*\.\s*(?=\d)', '.', text)
     text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r"[^a-zA-Z0-9\s\-.,;:!?()/\\%#@$*+=\"'_<>]", "", text)
+
+    # Keep all alphabetic characters from any language, plus common punctuation
+    text = re.sub(r'[^\p{L}\p{N}\s\p{P}\p{S}]', '', text, flags=re.UNICODE)
+
     return text.strip()
 
 logging.info("Applying preprocessing...")
 for name, df in dataframes.items():
     logging.info(f"Preprocessing {name}...")
     if "observation" in df.columns and "problemcause" in df.columns and "solution" in df.columns:
-        df[["observation", "problemcause", "solution"]] = df[["observation", "problemcause", "solution"]].applymap(clean_text)
+        df[["observation", "problemcause", "solution"]] = df[["observation", "problemcause", "solution"]].map(clean_text)
 
 # Merge all dataframes into a single dataset
 logging.info("Merging all dataframes into a single dataset...")
@@ -147,11 +159,7 @@ for col in METADATA_COLUMNS:
 
 # Remove empty text entries
 combined_df = combined_df[combined_df['observation'] != '']
-
-# Identify and convert problematic columns to strings
-mixed_type_cols = [col for col in combined_df.columns if combined_df[col].map(type).nunique() > 1]
-for col in mixed_type_cols:
-    combined_df[col] = combined_df[col].astype(str)
+combined_df = combined_df[combined_df['solution'] != '']
 
 # Rename columns
 column_mapping = {
@@ -185,9 +193,20 @@ column_mapping = {
 # Rename the columns in the combined_df DataFrame
 combined_df.rename(columns=column_mapping, inplace=True)
 
+for column in combined_df.columns:
+    if combined_df[column].dtype == object:
+        combined_df[column] = combined_df[column].fillna('')
+    else:
+        combined_df[column] = combined_df[column].fillna(0)
+
+# Identify and convert problematic columns to strings
+mixed_type_cols = [col for col in combined_df.columns if combined_df[col].map(type).nunique() > 1]
+for col in mixed_type_cols:
+    combined_df[col] = combined_df[col].astype(str)
+
 # Save the enhanced knowledge base
-logging.info("Saving enhanced knowledge base...")
-output_file = 'sts_combined'
+logging.info("Saving Processed knowledge base...")
+output_file = 'combined_data'
 output_dataset = dataiku.Dataset(output_file)
 output_dataset.write_with_schema(combined_df)
-logging.info(f"Enhanced knowledge base saved to '{output_file}'")
+logging.info(f"Processed knowledge base saved to '{output_file}'")
